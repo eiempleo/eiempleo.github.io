@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+
+
+<html lang="en-us">
+  <head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+
+  
+  <title>Mercury</title>
+
+  
+  
+  <meta name="description" content="" />
+  <meta name="author" content="" />
+  
+
+  
+  
+  
+  
+  
+  
+  <link rel="preload stylesheet" as="style" href="https://eiempleo.github.io/app.min.css" />
+
+  
+
+  
+  <link rel="preload" as="image" href="https://eiempleo.github.io/theme.png" />
+
+  
+
+  
+  <link rel="icon" href="https://eiempleo.github.io/favicon.ico" />
+  <link rel="apple-touch-icon" href="https://eiempleo.github.io/apple-touch-icon.png" />
+
+  
+  <meta name="generator" content="Hugo 0.99.0" />
+
+  
+  
+  <link
+    rel="alternate"
+    type="application/rss&#43;xml"
+    href="https://eiempleo.github.io/index.xml"
+    title="Mercury"
+  />
+  
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <meta property="og:title" content="Mercury" />
+<meta property="og:description" content="" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://eiempleo.github.io/" />
+
+
+  
+  <meta itemprop="name" content="Mercury">
+<meta itemprop="description" content="">
+  
+  <meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Mercury"/>
+<meta name="twitter:description" content=""/>
+
+  
+  
+</head>
+
+
+  <body class="not-ready" data-menu="false">
+    <header class="header">
+  
+  <h1 class="logo">
+    <a class="site-name" href="https://eiempleo.github.io/">Mercury</a><a class="btn-dark"></a>
+  </h1>
+  
+
+  <script>
+    let bodyClx = document.body.classList;
+    let btnDark = document.querySelector('.btn-dark');
+    let sysDark = window.matchMedia('(prefers-color-scheme: dark)');
+    let darkVal = localStorage.getItem('dark');
+
+    let setDark = (isDark) => {
+      bodyClx[isDark ? 'add' : 'remove']('dark');
+      localStorage.setItem('dark', isDark ? 'yes' : 'no');
+    };
+
+    setDark(darkVal ? darkVal === 'yes' : sysDark.matches);
+    requestAnimationFrame(() => bodyClx.remove('not-ready'));
+
+    btnDark.addEventListener('click', () => setDark(!bodyClx.contains('dark')));
+    sysDark.addEventListener('change', (event) => setDark(event.matches));
+  </script>
+
+  
+  
+
+  
+</header>
+
+
+    <main class="main">
+
+
+
+<h1 class="main-title">Mercury</h1>
+
+
+
+
+ 
+
+
+
+ 
+<article class="post-entry">
+  <h2>vpp asan 相关原理介绍</h2>
+  <time>Jun 20, 2022</time>
+  <a href="https://eiempleo.github.io/posts/vpp-asan-%E7%9B%B8%E5%85%B3%E5%8E%9F%E7%90%86%E4%BB%8B%E7%BB%8D/"></a>
+</article>
+
+<article class="post-entry">
+  <h2>dpdk asan 介绍</h2>
+  <time>Jun 17, 2022</time>
+  <a href="https://eiempleo.github.io/posts/dpdk-memory-asan-%E4%BB%8B%E7%BB%8D/"></a>
+</article>
+
+<article class="post-entry">
+  <h2>dpdk pcie 配置空间 和 bar 的映射介绍</h2>
+  <time>Jun 13, 2022</time>
+  <a href="https://eiempleo.github.io/posts/dpdk-pcie-%E9%85%8D%E7%BD%AE%E7%A9%BA%E9%97%B4-%E5%92%8C-bar-%E7%9A%84%E6%98%A0%E5%B0%84-%E4%BB%8B%E7%BB%8D/"></a>
+</article>
+
+<article class="post-entry">
+  <h2>dpdk 网卡中断处理流程(i40e)</h2>
+  <time>May 30, 2022</time>
+  <a href="https://eiempleo.github.io/posts/dpdk-%E7%BD%91%E5%8D%A1%E4%B8%AD%E6%96%AD%E7%9A%84%E5%A4%84%E7%90%86%E6%B5%81%E7%A8%8Bi40e/"></a>
+</article>
+
+<article class="post-entry">
+  <h2>dpdk 网卡 配置 和 收发包 相关流程介绍（i40e）</h2>
+  <time>Mar 7, 2022</time>
+  <a href="https://eiempleo.github.io/posts/dpdk-%E7%BD%91%E5%8D%A1-%E9%85%8D%E7%BD%AE-%E5%92%8C-%E6%94%B6%E5%8F%91%E5%8C%85-%E7%9B%B8%E5%85%B3%E6%B5%81%E7%A8%8B%E4%BB%8B%E7%BB%8Di40e/"></a>
+</article>
+
+<article class="post-entry">
+  <h2>rte_timer_subsystem_init 初始化介绍</h2>
+  <time>Jan 30, 2022</time>
+  <a href="https://eiempleo.github.io/posts/rte_timer_subsystem_init-%E5%88%9D%E5%A7%8B%E5%8C%96%E4%BB%8B%E7%BB%8D/"></a>
+</article>
+
+<article class="post-entry">
+  <h2>rte_timer 介绍</h2>
+  <time>Jan 25, 2022</time>
+  <a href="https://eiempleo.github.io/posts/rte_timer-%E4%BB%8B%E7%BB%8D/"></a>
+</article>
+
+<article class="post-entry">
+  <h2>vpp bitmap 介绍</h2>
+  <time>Dec 1, 2021</time>
+  <a href="https://eiempleo.github.io/posts/vpp-bitmap/"></a>
+</article>
+
+<article class="post-entry">
+  <h2>vpp 路由基础概念</h2>
+  <time>Aug 17, 2021</time>
+  <a href="https://eiempleo.github.io/posts/vpp-%E8%B7%AF%E7%94%B1%E5%9F%BA%E7%A1%80%E6%A6%82%E5%BF%B5/"></a>
+</article>
+
+<article class="post-entry">
+  <h2>dpdk malloc heap 介绍</h2>
+  <time>Jun 17, 2021</time>
+  <a href="https://eiempleo.github.io/posts/dpdk-malloc_heap-%E4%BB%8B%E7%BB%8D/"></a>
+</article>
+
+
+
+
+<nav class="main-nav">
+  
+  
+  <a class="next" href="/page/2/">Next Page →</a>
+  
+</nav>
+
+
+</main>
+
+    <footer class="footer">
+  <p>&copy; 2022 <a href="https://eiempleo.github.io/">Mercury</a></p>
+  <p>Powered by <a href="https://gohugo.io/" rel="noopener" target="_blank">Hugo️️</a>️</p>
+  <p>
+    <a href="https://github.com/nanxiaobei/hugo-paper" rel="noopener" target="_blank">Paper 5.1</a>
+  </p>
+</footer>
+
+  </body>
+</html>

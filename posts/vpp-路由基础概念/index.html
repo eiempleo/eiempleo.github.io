@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+
+
+<html lang="en-us">
+  <head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+
+  
+  <title>vpp 路由基础概念 - Mercury</title>
+
+  
+  
+  <meta name="description" content="https://fd.io/docs/vpp/master/developer/corefeatures/fib/routes.html https://github.com/FDio/vpp/blob/master/src/vnet/fib/fib.h
+代码查看思路 搭建测试环境， 查看每种流程的触发条件，使用 gdb 跟踪， 因为 vpp route 太过于 复杂， 直接查看代码很有可能分析错误，
+多使用 show ip fib [prefix] [detail] 命令，
+适当参考 官方文档，
+可适当通过日志查看流程，(路由太过复杂，适合已经比较熟悉后再这样查看，) 设置的 level 要大于等于 vlib_log() 指定的 默认 level 才能输出，debug 是最大的， set logging class fib level debug set logging class ip level debug set logging class ip6 level debug set logging class dpo level debug set logging class adj level debug
+日志输出 相关接口， FIB_ENTRY_DBG() FIB_PATH_DBG() FIB_PATH_LIST_DBG() FIB_WALK_DBG()
+route 的组成，(prefix &#43; path) 主要包含 what to match against 和 how to forward the matched packets ，" />
+  <meta name="author" content="" />
+  
+
+  
+  
+  
+  
+  
+  
+  <link rel="preload stylesheet" as="style" href="https://eiempleo.github.io/app.min.css" />
+
+  
+  <link rel="preload stylesheet" as="style" href="https://eiempleo.github.io/an-old-hope.min.css" />
+  <script
+    defer
+    src="https://eiempleo.github.io/highlight.min.js"
+    onload="hljs.initHighlightingOnLoad();"
+  ></script>
+  
+
+  
+  <link rel="preload" as="image" href="https://eiempleo.github.io/theme.png" />
+
+  
+
+  
+  <link rel="icon" href="https://eiempleo.github.io/favicon.ico" />
+  <link rel="apple-touch-icon" href="https://eiempleo.github.io/apple-touch-icon.png" />
+
+  
+  <meta name="generator" content="Hugo 0.99.0" />
+
+  
+  
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <meta property="og:title" content="vpp 路由基础概念" />
+<meta property="og:description" content="https://fd.io/docs/vpp/master/developer/corefeatures/fib/routes.html https://github.com/FDio/vpp/blob/master/src/vnet/fib/fib.h
+代码查看思路 搭建测试环境， 查看每种流程的触发条件，使用 gdb 跟踪， 因为 vpp route 太过于 复杂， 直接查看代码很有可能分析错误，
+多使用 show ip fib [prefix] [detail] 命令，
+适当参考 官方文档，
+可适当通过日志查看流程，(路由太过复杂，适合已经比较熟悉后再这样查看，) 设置的 level 要大于等于 vlib_log() 指定的 默认 level 才能输出，debug 是最大的， set logging class fib level debug set logging class ip level debug set logging class ip6 level debug set logging class dpo level debug set logging class adj level debug
+日志输出 相关接口， FIB_ENTRY_DBG() FIB_PATH_DBG() FIB_PATH_LIST_DBG() FIB_WALK_DBG()
+route 的组成，(prefix &#43; path) 主要包含 what to match against 和 how to forward the matched packets ，" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://eiempleo.github.io/posts/vpp-%E8%B7%AF%E7%94%B1%E5%9F%BA%E7%A1%80%E6%A6%82%E5%BF%B5/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2021-08-17T18:00:00+08:00" />
+<meta property="article:modified_time" content="2021-08-17T18:00:00+08:00" />
+
+
+  
+  <meta itemprop="name" content="vpp 路由基础概念">
+<meta itemprop="description" content="https://fd.io/docs/vpp/master/developer/corefeatures/fib/routes.html https://github.com/FDio/vpp/blob/master/src/vnet/fib/fib.h
+代码查看思路 搭建测试环境， 查看每种流程的触发条件，使用 gdb 跟踪， 因为 vpp route 太过于 复杂， 直接查看代码很有可能分析错误，
+多使用 show ip fib [prefix] [detail] 命令，
+适当参考 官方文档，
+可适当通过日志查看流程，(路由太过复杂，适合已经比较熟悉后再这样查看，) 设置的 level 要大于等于 vlib_log() 指定的 默认 level 才能输出，debug 是最大的， set logging class fib level debug set logging class ip level debug set logging class ip6 level debug set logging class dpo level debug set logging class adj level debug
+日志输出 相关接口， FIB_ENTRY_DBG() FIB_PATH_DBG() FIB_PATH_LIST_DBG() FIB_WALK_DBG()
+route 的组成，(prefix &#43; path) 主要包含 what to match against 和 how to forward the matched packets ，"><meta itemprop="datePublished" content="2021-08-17T18:00:00+08:00" />
+<meta itemprop="dateModified" content="2021-08-17T18:00:00+08:00" />
+<meta itemprop="wordCount" content="728">
+<meta itemprop="keywords" content="" />
+  
+  <meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="vpp 路由基础概念"/>
+<meta name="twitter:description" content="https://fd.io/docs/vpp/master/developer/corefeatures/fib/routes.html https://github.com/FDio/vpp/blob/master/src/vnet/fib/fib.h
+代码查看思路 搭建测试环境， 查看每种流程的触发条件，使用 gdb 跟踪， 因为 vpp route 太过于 复杂， 直接查看代码很有可能分析错误，
+多使用 show ip fib [prefix] [detail] 命令，
+适当参考 官方文档，
+可适当通过日志查看流程，(路由太过复杂，适合已经比较熟悉后再这样查看，) 设置的 level 要大于等于 vlib_log() 指定的 默认 level 才能输出，debug 是最大的， set logging class fib level debug set logging class ip level debug set logging class ip6 level debug set logging class dpo level debug set logging class adj level debug
+日志输出 相关接口， FIB_ENTRY_DBG() FIB_PATH_DBG() FIB_PATH_LIST_DBG() FIB_WALK_DBG()
+route 的组成，(prefix &#43; path) 主要包含 what to match against 和 how to forward the matched packets ，"/>
+
+  
+  
+</head>
+
+
+  <body class="not-ready" data-menu="false">
+    <header class="header">
+  
+  <p class="logo">
+    <a class="site-name" href="https://eiempleo.github.io/">Mercury</a><a class="btn-dark"></a>
+  </p>
+  
+
+  <script>
+    let bodyClx = document.body.classList;
+    let btnDark = document.querySelector('.btn-dark');
+    let sysDark = window.matchMedia('(prefers-color-scheme: dark)');
+    let darkVal = localStorage.getItem('dark');
+
+    let setDark = (isDark) => {
+      bodyClx[isDark ? 'add' : 'remove']('dark');
+      localStorage.setItem('dark', isDark ? 'yes' : 'no');
+    };
+
+    setDark(darkVal ? darkVal === 'yes' : sysDark.matches);
+    requestAnimationFrame(() => bodyClx.remove('not-ready'));
+
+    btnDark.addEventListener('click', () => setDark(!bodyClx.contains('dark')));
+    sysDark.addEventListener('change', (event) => setDark(event.matches));
+  </script>
+
+  
+  
+
+  
+</header>
+
+
+    <main class="main">
+
+<article class="post-single">
+  <header class="post-title">
+    <p>
+      
+      <time>Aug 17, 2021</time>
+      
+      
+    </p>
+    <h1>vpp 路由基础概念</h1>
+  </header>
+  <section class="post-content"><p><a href="https://fd.io/docs/vpp/master/developer/corefeatures/fib/routes.html">https://fd.io/docs/vpp/master/developer/corefeatures/fib/routes.html</a>
+<a href="https://github.com/FDio/vpp/blob/master/src/vnet/fib/fib.h">https://github.com/FDio/vpp/blob/master/src/vnet/fib/fib.h</a></p>
+<h2 id="代码查看思路">代码查看思路</h2>
+<p>搭建测试环境，
+查看每种流程的触发条件，使用 gdb 跟踪，
+因为 vpp route 太过于 复杂， 直接查看代码很有可能分析错误，</p>
+<p>多使用 show ip fib [prefix] [detail] 命令，</p>
+<p>适当参考 官方文档，</p>
+<p>可适当通过日志查看流程，(路由太过复杂，适合已经比较熟悉后再这样查看，)
+设置的 level 要大于等于 vlib_log() 指定的 默认 level 才能输出，debug 是最大的，
+set logging class fib level debug
+set logging class ip level debug
+set logging class ip6 level debug
+set logging class dpo level debug
+set logging class adj level debug</p>
+<p>日志输出 相关接口，
+FIB_ENTRY_DBG()
+FIB_PATH_DBG()
+FIB_PATH_LIST_DBG()
+FIB_WALK_DBG()</p>
+<h2 id="route-的组成prefix--path">route 的组成，(prefix + path)</h2>
+<p>主要包含 what to match against 和 how to forward the matched packets ，</p>
+<p>对于 ip-fib ，
+what to match against: prefix ，
+how to forward the matched packets: path ，</p>
+<p>比如
+1.1.1.0/24 via 10.0.0.1 eth0
+prefix: 1.1.1.0/24
+path: 10.0.0.1 eth0</p>
+<p>对于 mpls-fib
+what to match against: MPLS labels
+how to forward the matched packets: path ，</p>
+<h2 id="fib-entry">fib entry</h2>
+<p>代表一个 route entry ，
+The fib_entry_t, which contains the route&rsquo;s prefix, is the representation of that prefix&rsquo;s entry in the FIB table.</p>
+<h2 id="fib-source-">fib source ，</h2>
+<p>同一个 fib entry 可以有多个 source ， (一个 fib entry 可能通过多个来源添加，)
+比如
+set interface address 192.168.1.1/24 GigE0
+FIB_SOURCE_INTERFACE: 192.168.1.1/32 prefix&rsquo;s fib entry
+ip route 192.168.1.1/32 via 2.2.2.2/32
+FIB_SOURCE_CLI: 192.168.1.1/32 prefix&rsquo;s fib entry
+此时 192.168.1.1/32 prefix&rsquo;s fib entry 有两个来源， FIB_SOURCE_INTERFACE 和 FIB_SOURCE_CLI ，
+FIB_SOURCE_INTERFACE 的优先级较高，用于生成 转发表(dp)的路由 path ，
+这些 source 不会融合， 因为一旦 FIB_SOURCE_INTERFACE 消失了， 比如 set interface address del 192.168.1.1/24 GigE0 ，
+会使用 FIB_SOURCE_CLI 来生成 转发表(dp) ，</p>
+<p>所有 source 存储在 fib_entry-&gt;fe_srcs 里，按照优先级从高到低的顺序排列，
+fib_entry_src_action_init().vec_sort_with_function() ， 数字越小，优先级越高，
+因为 fib_source_get_prio() 的值越小，优先级越高，
+每种 source 优先级不一样，
+fib_entry_src_find_or_create().fib_entry_src_action_init() 会根据 source 的优先级给 fib_entry-&gt;fe_srcs 排序，</p>
+<p>默认的优先级在 foreach_fib_source 里定义，
+关于优先级有下面解释，
+数字越低的 优先级越高， 优先级最高的 source 的 path list 会添加到转发表里，
+当优先级最高的 source 被删除后， 较次优先级的 source 的 path list 会添加到转发表里，</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c" data-lang="c"><span style="display:flex;"><span><span style="color:#75715e">/**
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"> * Each source is assigned a priority. lower priority is better.
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"> * the source with the best source with have its contribution added
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"> * to forwarding. the lesser sources will be &#39;remembered&#39; by FIB and
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"> * added to forwarding should the best source be removed.
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"> */</span>
+</span></span><span style="display:flex;"><span>fib_source_priority_t
+</span></span></code></pre></div><p>每个 source 分别有不同的 path list ，
+一些 source 如 ： FIB_SOURCE_API ， FIB_SOURCE_CLI， FIB_SOURCE_ADJ， FIB_SOURCE_INTERFACE，</p>
+<p>每个 source 都有一系列回调函数， 用于 激活，删除 source ，给 source 添加 path list 等，
+如 adj_src_vft 、 api_src_vft 、 interface_src_vft 、 rr_src_vft ，
+由 FIB_ENTRY_SRC_VFT_INVOKE 间接调用，
+每个 source 对应的 回调函数由 fib_entry_src_behaviour_register() 注册，	
+每个 source 对应的 回调函数由 fib_entry_src_get_vft() 获得，</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c" data-lang="c"><span style="display:flex;"><span><span style="color:#75715e">/**
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"> * Get the VFT for a given source. 
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"> * This is a combination of the source enum and the interposer flags
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"> */</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> fib_entry_src_vft_t<span style="color:#f92672">*</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">fib_entry_src_get_vft</span>(<span style="color:#66d9ef">const</span> fib_entry_src_t <span style="color:#f92672">*</span>esrc)
+</span></span><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>	fib_source_behaviour_t bh;
+</span></span><span style="display:flex;"><span>	bh <span style="color:#f92672">=</span> fib_source_get_behaviour(esrc<span style="color:#f92672">-&gt;</span>fes_src);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">return</span> (<span style="color:#f92672">&amp;</span>fib_entry_src_bh_vft[bh]);
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>fib_source_module_init() 初始化所有 默认 source
+通过 foreach_fib_source 和 fib_source_register().fib_source_reg_init() ，
+存放在 fib_source_regs 数组 里，
+fsr-&gt;fsr_source = src
+source id ，比如 foreach_fib_source 的第一列，
+fsr-&gt;fsr_prio.fsp_class = prio ，
+主优先级， foreach_fib_source 的第二列，
+fsr-&gt;fsr_prio.fsp_slot = slot ，
+次优先级， 相同主优先级下， slot 越小优先级越高，
+fsr-&gt;fsr_behaviour = bh;
+foreach_fib_source 的第三列，</p>
+<p>可以 添加 自定义 source ， 指定 优先级 和 bh_vft ，
+通过 fib_source_allocate().fib_source_reg_init() ，
+也是存放在 存放在 fib_source_regs 数组 里，存放规则同 fib_source_module_init().fib_source_register() ，
+因为都是通过 fib_source_reg_init() ，
+如 snat_init() 添加 nat_fib_src_low 这个 source , 使用的 bh_vft 为 FIB_SOURCE_BH_SIMPLE 对应的 simple_src_vft ，
+nat_fib_src_low = fib_source_allocate(&ldquo;nat-low&rdquo;, FIB_SOURCE_PRIORITY_LOW, FIB_SOURCE_BH_SIMPLE);</p>
+<p>fib_source_get_prio() 可以获取 优先级，数值越小，优先级越高，
+fib_source_regs[src].fsr_prio.fsp_class &laquo; 8) | fib_source_regs[src].fsr_prio.fsp_slot
+fib_source_cmp() 也可以看出来， fib_source_get_prio() 的数值越小， 优先级越高，</p>
+<p>根据 优先级 排序，显示 source ，(越上面的优先级越高，)
+调用函数为 format_fib_source_reg() ，</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-sh" data-lang="sh"><span style="display:flex;"><span>DBGvpp# show fib source prio
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>1<span style="color:#f92672">]</span> special prio:0.0 behaviour:simple
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>2<span style="color:#f92672">]</span> classify prio:1.0 behaviour:simple
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>3<span style="color:#f92672">]</span> proxy prio:2.0 behaviour:simple
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>23<span style="color:#f92672">]</span> cnat prio:2.1 behaviour:simple
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>4<span style="color:#f92672">]</span> interface prio:3.0 behaviour:interface
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>5<span style="color:#f92672">]</span> SR prio:16.0 behaviour:api
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>22<span style="color:#f92672">]</span> path-mtu prio:16.1 behaviour:simple
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>24<span style="color:#f92672">]</span> det44-hi prio:16.2 behaviour:simple
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>26<span style="color:#f92672">]</span> dslite-hi prio:16.3 behaviour:simple
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>27<span style="color:#f92672">]</span> ila prio:16.4 behaviour:simple
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>28<span style="color:#f92672">]</span> lb prio:16.5 behaviour:simple
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>30<span style="color:#f92672">]</span> nat44-ei-hi prio:16.6 behaviour:simple
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>31<span style="color:#f92672">]</span> nat64-hi prio:16.7 behaviour:simple
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>33<span style="color:#f92672">]</span> nat66-hi prio:16.8 behaviour:simple
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>35<span style="color:#f92672">]</span> nat-hi prio:16.9 behaviour:simple
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>36<span style="color:#f92672">]</span> pppoe prio:16.10 behaviour:api
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>6<span style="color:#f92672">]</span> BIER prio:32.0 behaviour:simple
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>7<span style="color:#f92672">]</span> 6RD prio:48.0 behaviour:api
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>8<span style="color:#f92672">]</span> API prio:128.0 behaviour:api
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>9<span style="color:#f92672">]</span> CLI prio:129.0 behaviour:api
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>10<span style="color:#f92672">]</span> LISP prio:144.0 behaviour:lisp
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>11<span style="color:#f92672">]</span> MAP prio:160.0 behaviour:simple
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>12<span style="color:#f92672">]</span> DHCP prio:176.0 behaviour:api
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>13<span style="color:#f92672">]</span> IPv6-proxy-nd prio:192.0 behaviour:api
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>14<span style="color:#f92672">]</span> IPv6-nd prio:193.0 behaviour:api
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>15<span style="color:#f92672">]</span> adjacency prio:208.0 behaviour:adjacency
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>25<span style="color:#f92672">]</span> det44-low prio:208.1 behaviour:simple
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>29<span style="color:#f92672">]</span> nat44-ei-low prio:208.2 behaviour:simple
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>32<span style="color:#f92672">]</span> nat64-low prio:208.3 behaviour:simple
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>34<span style="color:#f92672">]</span> nat-low prio:208.4 behaviour:simple
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>37<span style="color:#f92672">]</span> svs prio:208.5 behaviour:simple
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>16<span style="color:#f92672">]</span> mpls prio:224.0 behaviour:mpls
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>17<span style="color:#f92672">]</span> attached_export prio:240.0 behaviour:simple
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>18<span style="color:#f92672">]</span> recursive-resolution prio:251.0 behaviour:rr
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>19<span style="color:#f92672">]</span> urpf-exempt prio:252.0 behaviour:rr
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>20<span style="color:#f92672">]</span> default-route prio:253.0 behaviour:drop
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>21<span style="color:#f92672">]</span> interpose prio:254.0 behaviour:interpose
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>0<span style="color:#f92672">]</span> invalid prio:255.0 behaviour:drop
+</span></span></code></pre></div><h2 id="fib-path-和-fib-path-list">fib path 和 fib path list</h2>
+<p>每个 path 有一个类型(fib_path_type_t) ，
+如 FIB_PATH_TYPE_ATTACHED_NEXT_HOP 、 FIB_PATH_TYPE_ATTACHED 、 FIB_PATH_TYPE_RECEIVE 、 FIB_PATH_TYPE_RECURSIVE
+dpo 存储到 path-&gt;fp_dpo 里， path-&gt;fp_dpo.dpoi_type 标识 dpo 的类型，</p>
+<p>path list 可以被多个 fib entry 共享，(多个 source 可能使用同一个 path list ，)
+如下面两个 命令就让两个 entry 的 cli source 共享相同的 path list
+ip route add table 1 64.10.1.0/24 10.0.0.2 GigabitEthernet2/0/1 10.1.1.2 GigabitEthernet2/0/2 weight 2
+ip route add table 1 64.10.2.0/24 10.0.0.2 GigabitEthernet2/0/1 10.1.1.2 GigabitEthernet2/0/2 weight 2</p>
+</section>
+
+  
+  
+
+  
+  
+  
+  <nav class="post-nav">
+    
+    <a class="prev" href="https://eiempleo.github.io/posts/vpp-bitmap/"><span>←</span><span>vpp bitmap 介绍</span></a>
+     
+    <a class="next" href="https://eiempleo.github.io/posts/dpdk-malloc_heap-%E4%BB%8B%E7%BB%8D/"><span>dpdk malloc heap 介绍</span><span>→</span></a>
+    
+  </nav>
+  
+
+  
+  
+</article>
+
+</main>
+
+    <footer class="footer">
+  <p>&copy; 2022 <a href="https://eiempleo.github.io/">Mercury</a></p>
+  <p>Powered by <a href="https://gohugo.io/" rel="noopener" target="_blank">Hugo️️</a>️</p>
+  <p>
+    <a href="https://github.com/nanxiaobei/hugo-paper" rel="noopener" target="_blank">Paper 5.1</a>
+  </p>
+</footer>
+
+  </body>
+</html>

@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+
+
+<html lang="en-us">
+  <head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+
+  
+  <title>vpp worker thread 初始化介绍 - Mercury</title>
+
+  
+  
+  <meta name="description" content="vpp worker thread 初始化介绍， cpu_config() 可以配置 main thread 和 worker thread 与 cpu 的附属关系，
+通过 VLIB_REGISTER_THREAD() 注册 worker thread ， 其中包含 线程回调 vlib_worker_thread_fn() ，
+main().vlib_unix_main().clib_calljmp() --&gt; thread0().vlib_main() { 	vlib_thread_init() 对线程进行一些基本的初始化， 	vlib_call_all_main_loop_enter_functions() 调用 start_workers() 初始化线程， } start_workers()
+ 复制一些线程私有的数据， 如 node_runtime 等结构， vlib_thread_stack_init() 分配栈内存， vlib_launch_thread_int(vlib_worker_thread_bootstrap_fn, w, c); 创建线程，  vlib_launch_thread_int().pthread_create() 创建线程，线程回调函数为 vlib_worker_thread_bootstrap_fn() ，
+vlib_worker_thread_bootstrap_fn() 调用 VLIB_REGISTER_THREAD() 注册的 w-&gt;thread_function (arg) ，
+vpp worker 的回调为 vlib_worker_thread_fn()
+vlib_worker_thread_fn().vlib_worker_loop().vlib_main_or_worker_loop()
+查看， 可以通过 gdb 查看 vpp_main 、 vpp_wk_0 的堆栈，" />
+  <meta name="author" content="" />
+  
+
+  
+  
+  
+  
+  
+  
+  <link rel="preload stylesheet" as="style" href="https://eiempleo.github.io/app.min.css" />
+
+  
+  <link rel="preload stylesheet" as="style" href="https://eiempleo.github.io/an-old-hope.min.css" />
+  <script
+    defer
+    src="https://eiempleo.github.io/highlight.min.js"
+    onload="hljs.initHighlightingOnLoad();"
+  ></script>
+  
+
+  
+  <link rel="preload" as="image" href="https://eiempleo.github.io/theme.png" />
+
+  
+
+  
+  <link rel="icon" href="https://eiempleo.github.io/favicon.ico" />
+  <link rel="apple-touch-icon" href="https://eiempleo.github.io/apple-touch-icon.png" />
+
+  
+  <meta name="generator" content="Hugo 0.99.0" />
+
+  
+  
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <meta property="og:title" content="vpp worker thread 初始化介绍" />
+<meta property="og:description" content="vpp worker thread 初始化介绍， cpu_config() 可以配置 main thread 和 worker thread 与 cpu 的附属关系，
+通过 VLIB_REGISTER_THREAD() 注册 worker thread ， 其中包含 线程回调 vlib_worker_thread_fn() ，
+main().vlib_unix_main().clib_calljmp() --&gt; thread0().vlib_main() { 	vlib_thread_init() 对线程进行一些基本的初始化， 	vlib_call_all_main_loop_enter_functions() 调用 start_workers() 初始化线程， } start_workers()
+ 复制一些线程私有的数据， 如 node_runtime 等结构， vlib_thread_stack_init() 分配栈内存， vlib_launch_thread_int(vlib_worker_thread_bootstrap_fn, w, c); 创建线程，  vlib_launch_thread_int().pthread_create() 创建线程，线程回调函数为 vlib_worker_thread_bootstrap_fn() ，
+vlib_worker_thread_bootstrap_fn() 调用 VLIB_REGISTER_THREAD() 注册的 w-&gt;thread_function (arg) ，
+vpp worker 的回调为 vlib_worker_thread_fn()
+vlib_worker_thread_fn().vlib_worker_loop().vlib_main_or_worker_loop()
+查看， 可以通过 gdb 查看 vpp_main 、 vpp_wk_0 的堆栈，" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://eiempleo.github.io/posts/vpp-worker-thread-%E5%88%9D%E5%A7%8B%E5%8C%96%E4%BB%8B%E7%BB%8D/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2020-10-14T15:00:00+08:00" />
+<meta property="article:modified_time" content="2020-10-14T15:00:00+08:00" />
+
+
+  
+  <meta itemprop="name" content="vpp worker thread 初始化介绍">
+<meta itemprop="description" content="vpp worker thread 初始化介绍， cpu_config() 可以配置 main thread 和 worker thread 与 cpu 的附属关系，
+通过 VLIB_REGISTER_THREAD() 注册 worker thread ， 其中包含 线程回调 vlib_worker_thread_fn() ，
+main().vlib_unix_main().clib_calljmp() --&gt; thread0().vlib_main() { 	vlib_thread_init() 对线程进行一些基本的初始化， 	vlib_call_all_main_loop_enter_functions() 调用 start_workers() 初始化线程， } start_workers()
+ 复制一些线程私有的数据， 如 node_runtime 等结构， vlib_thread_stack_init() 分配栈内存， vlib_launch_thread_int(vlib_worker_thread_bootstrap_fn, w, c); 创建线程，  vlib_launch_thread_int().pthread_create() 创建线程，线程回调函数为 vlib_worker_thread_bootstrap_fn() ，
+vlib_worker_thread_bootstrap_fn() 调用 VLIB_REGISTER_THREAD() 注册的 w-&gt;thread_function (arg) ，
+vpp worker 的回调为 vlib_worker_thread_fn()
+vlib_worker_thread_fn().vlib_worker_loop().vlib_main_or_worker_loop()
+查看， 可以通过 gdb 查看 vpp_main 、 vpp_wk_0 的堆栈，"><meta itemprop="datePublished" content="2020-10-14T15:00:00+08:00" />
+<meta itemprop="dateModified" content="2020-10-14T15:00:00+08:00" />
+<meta itemprop="wordCount" content="371">
+<meta itemprop="keywords" content="" />
+  
+  <meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="vpp worker thread 初始化介绍"/>
+<meta name="twitter:description" content="vpp worker thread 初始化介绍， cpu_config() 可以配置 main thread 和 worker thread 与 cpu 的附属关系，
+通过 VLIB_REGISTER_THREAD() 注册 worker thread ， 其中包含 线程回调 vlib_worker_thread_fn() ，
+main().vlib_unix_main().clib_calljmp() --&gt; thread0().vlib_main() { 	vlib_thread_init() 对线程进行一些基本的初始化， 	vlib_call_all_main_loop_enter_functions() 调用 start_workers() 初始化线程， } start_workers()
+ 复制一些线程私有的数据， 如 node_runtime 等结构， vlib_thread_stack_init() 分配栈内存， vlib_launch_thread_int(vlib_worker_thread_bootstrap_fn, w, c); 创建线程，  vlib_launch_thread_int().pthread_create() 创建线程，线程回调函数为 vlib_worker_thread_bootstrap_fn() ，
+vlib_worker_thread_bootstrap_fn() 调用 VLIB_REGISTER_THREAD() 注册的 w-&gt;thread_function (arg) ，
+vpp worker 的回调为 vlib_worker_thread_fn()
+vlib_worker_thread_fn().vlib_worker_loop().vlib_main_or_worker_loop()
+查看， 可以通过 gdb 查看 vpp_main 、 vpp_wk_0 的堆栈，"/>
+
+  
+  
+</head>
+
+
+  <body class="not-ready" data-menu="false">
+    <header class="header">
+  
+  <p class="logo">
+    <a class="site-name" href="https://eiempleo.github.io/">Mercury</a><a class="btn-dark"></a>
+  </p>
+  
+
+  <script>
+    let bodyClx = document.body.classList;
+    let btnDark = document.querySelector('.btn-dark');
+    let sysDark = window.matchMedia('(prefers-color-scheme: dark)');
+    let darkVal = localStorage.getItem('dark');
+
+    let setDark = (isDark) => {
+      bodyClx[isDark ? 'add' : 'remove']('dark');
+      localStorage.setItem('dark', isDark ? 'yes' : 'no');
+    };
+
+    setDark(darkVal ? darkVal === 'yes' : sysDark.matches);
+    requestAnimationFrame(() => bodyClx.remove('not-ready'));
+
+    btnDark.addEventListener('click', () => setDark(!bodyClx.contains('dark')));
+    sysDark.addEventListener('change', (event) => setDark(event.matches));
+  </script>
+
+  
+  
+
+  
+</header>
+
+
+    <main class="main">
+
+<article class="post-single">
+  <header class="post-title">
+    <p>
+      
+      <time>Oct 14, 2020</time>
+      
+      
+    </p>
+    <h1>vpp worker thread 初始化介绍</h1>
+  </header>
+  <section class="post-content"><h2 id="vpp-worker-thread-初始化介绍">vpp worker thread 初始化介绍，</h2>
+<p>cpu_config() 可以配置 main thread 和 worker thread 与 cpu 的附属关系，<br>
+通过 VLIB_REGISTER_THREAD() 注册 worker thread ， 其中包含 线程回调 vlib_worker_thread_fn() ，</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c" data-lang="c"><span style="display:flex;"><span>main().vlib_unix_main().clib_calljmp()
+</span></span><span style="display:flex;"><span><span style="color:#f92672">--&gt;</span> thread0().vlib_main() {
+</span></span><span style="display:flex;"><span>	vlib_thread_init() <span style="color:#960050;background-color:#1e0010">对线程进行一些基本的初始化，</span>
+</span></span><span style="display:flex;"><span>	vlib_call_all_main_loop_enter_functions() <span style="color:#960050;background-color:#1e0010">调用</span> start_workers() <span style="color:#960050;background-color:#1e0010">初始化线程，</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>start_workers()</p>
+<ul>
+<li>复制一些线程私有的数据， 如 node_runtime 等结构，</li>
+<li>vlib_thread_stack_init() 分配栈内存，</li>
+<li>vlib_launch_thread_int(vlib_worker_thread_bootstrap_fn, w, c); 创建线程，</li>
+</ul>
+<p>vlib_launch_thread_int().pthread_create() 创建线程，线程回调函数为 vlib_worker_thread_bootstrap_fn() ，<br>
+vlib_worker_thread_bootstrap_fn() 调用 VLIB_REGISTER_THREAD() 注册的 w-&gt;thread_function (arg) ，<br>
+    vpp worker 的回调为 vlib_worker_thread_fn()<br>
+    vlib_worker_thread_fn().vlib_worker_loop().vlib_main_or_worker_loop()</p>
+<h2 id="查看">查看，</h2>
+<p>可以通过 gdb 查看 vpp_main 、 vpp_wk_0 的堆栈，</p>
+<pre tabindex="0"><code class="language-gdb" data-lang="gdb">(gdb) thread apply all bt
+
+Thread 4 (Thread 0x7fffad4e0700 (LWP 422609) &#34;vpp_wk_1&#34;):
+#0  0x00007ffff6f6a607 in vlib_get_node (vm=0x7fffbcc49900, i=238) at /root/data/source/vpp/src/vlib/node_funcs.h:88
+#1  0x00007ffff6f71cef in dispatch_node (vm=0x7fffbcc49900, node=0x7fffbcc46980, type=VLIB_NODE_TYPE_INPUT, dispatch_state=VLIB_NODE_STATE_POLLING, frame=0x0, last_time_stamp=1438740383738477) at /root/data/source/vpp/src/vlib/main.c:899
+#2  0x00007ffff6f6dd18 in vlib_main_or_worker_loop (vm=0x7fffbcc49900, is_main=0) at /root/data/source/vpp/src/vlib/main.c:1558
+#3  0x00007ffff6f6d677 in vlib_worker_loop (vm=0x7fffbcc49900) at /root/data/source/vpp/src/vlib/main.c:1723
+#4  0x00007ffff6fa90f0 in vlib_worker_thread_fn (arg=0x7fffb77ab480) at /root/data/source/vpp/src/vlib/threads.c:1587
+#5  0x00007ffff6fa4456 in vlib_worker_thread_bootstrap_fn (arg=0x7fffb77ab480) at /root/data/source/vpp/src/vlib/threads.c:418
+#6  0x00007ffff6ec9ea7 in start_thread (arg=&lt;optimized out&gt;) at pthread_create.c:477
+#7  0x00007ffff6bdadef in clone () at ../sysdeps/unix/sysv/linux/x86_64/clone.S:95
+
+Thread 3 (Thread 0x7fffad6e1700 (LWP 422608) &#34;vpp_wk_0&#34;):
+#0  0x00007ffff6f71dec in dispatch_node (vm=0x7fffbcbf0a80, node=0x7fffbcc479c0, type=VLIB_NODE_TYPE_INPUT, dispatch_state=VLIB_NODE_STATE_POLLING, frame=0x0, last_time_stamp=1438740383735731) at /root/data/source/vpp/src/vlib/main.c:915
+#1  0x00007ffff6f6dd18 in vlib_main_or_worker_loop (vm=0x7fffbcbf0a80, is_main=0) at /root/data/source/vpp/src/vlib/main.c:1558
+#2  0x00007ffff6f6d677 in vlib_worker_loop (vm=0x7fffbcbf0a80) at /root/data/source/vpp/src/vlib/main.c:1723
+#3  0x00007ffff6fa90f0 in vlib_worker_thread_fn (arg=0x7fffb77ab380) at /root/data/source/vpp/src/vlib/threads.c:1587
+#4  0x00007ffff6fa4456 in vlib_worker_thread_bootstrap_fn (arg=0x7fffb77ab380) at /root/data/source/vpp/src/vlib/threads.c:418
+#5  0x00007ffff6ec9ea7 in start_thread (arg=&lt;optimized out&gt;) at pthread_create.c:477
+#6  0x00007ffff6bdadef in clone () at ../sysdeps/unix/sysv/linux/x86_64/clone.S:95
+
+Thread 2 (Thread 0x7fffadf23700 (LWP 422607) &#34;eal-intr-thread&#34;):
+#0  0x00007ffff6bdb116 in epoll_wait (epfd=14, events=0x7fffadf22d50, maxevents=5, timeout=-1) at ../sysdeps/unix/sysv/linux/epoll_wait.c:30
+#1  0x00007fffb1ebdb36 in eal_intr_handle_interrupts (pfd=14, totalfds=5) at ../src-dpdk/lib/eal/linux/eal_interrupts.c:1077
+#2  0x00007fffb1ebdd4d in eal_intr_thread_main (arg=0x0) at ../src-dpdk/lib/eal/linux/eal_interrupts.c:1163
+#3  0x00007fffb1e9a007 in ctrl_thread_init (arg=0x55555559fcc0) at ../src-dpdk/lib/eal/common/eal_common_thread.c:203
+#4  0x00007ffff6ec9ea7 in start_thread (arg=&lt;optimized out&gt;) at pthread_create.c:477
+#5  0x00007ffff6bdadef in clone () at ../sysdeps/unix/sysv/linux/x86_64/clone.S:95
+
+Thread 1 (Thread 0x7ffff6ad87c0 (LWP 422595) &#34;vpp_main&#34;):
+#0  0x00007ffff6bdaf4e in __GI_epoll_pwait (epfd=6, events=0x7fffb752f908, maxevents=256, timeout=10, set=0x7ffff70309c0 &lt;linux_epoll_input_inline.unblock_all_signals&gt;) at ../sysdeps/unix/sysv/linux/epoll_pwait.c:42
+#1  0x00007ffff6fc9064 in linux_epoll_input_inline (vm=0x7fffb6ad8740, node=0x7fffb719b440, frame=0x0, thread_index=0) at /root/data/source/vpp/src/vlib/unix/input.c:219
+#2  0x00007ffff6fc8b89 in linux_epoll_input (vm=0x7fffb6ad8740, node=0x7fffb719b440, frame=0x0) at /root/data/source/vpp/src/vlib/unix/input.c:365
+#3  0x00007ffff6f71fd2 in dispatch_node (vm=0x7fffb6ad8740, node=0x7fffb719b440, type=VLIB_NODE_TYPE_PRE_INPUT, dispatch_state=VLIB_NODE_STATE_POLLING, frame=0x0, last_time_stamp=1438740322726853) at /root/data/source/vpp/src/vlib/main.c:961
+#4  0x00007ffff6f6dc64 in vlib_main_or_worker_loop (vm=0x7fffb6ad8740, is_main=1) at /root/data/source/vpp/src/vlib/main.c:1550
+#5  0x00007ffff6f6f75a in vlib_main_loop (vm=0x7fffb6ad8740) at /root/data/source/vpp/src/vlib/main.c:1717
+#6  0x00007ffff6f6f2a5 in vlib_main (vm=0x7fffb6ad8740, input=0x7fffb059afa0) at /root/data/source/vpp/src/vlib/main.c:2011
+#7  0x00007ffff6fcbec4 in thread0 (arg=140736258213696) at /root/data/source/vpp/src/vlib/unix/main.c:669
+#8  0x00007ffff6e2bee8 in clib_calljmp () at /root/data/source/vpp/src/vppinfra/longjmp.S:123
+#9  0x00007fffffffbc10 in ?? ()
+#10 0x00007ffff6fcb9ab in vlib_unix_main (argc=36, argv=0x7fffffffdfd8) at /root/data/source/vpp/src/vlib/unix/main.c:764
+#11 0x000055555555a52c in main (argc=36, argv=0x7fffffffdfd8) at /root/data/source/vpp/src/vpp/vnet/main.c:345
+</code></pre></section>
+
+  
+  
+
+  
+  
+  
+  <nav class="post-nav">
+    
+    <a class="prev" href="https://eiempleo.github.io/posts/vpp-node-%E4%BB%8B%E7%BB%8D/"><span>←</span><span>vpp node 介绍</span></a>
+     
+  </nav>
+  
+
+  
+  
+</article>
+
+</main>
+
+    <footer class="footer">
+  <p>&copy; 2022 <a href="https://eiempleo.github.io/">Mercury</a></p>
+  <p>Powered by <a href="https://gohugo.io/" rel="noopener" target="_blank">Hugo️️</a>️</p>
+  <p>
+    <a href="https://github.com/nanxiaobei/hugo-paper" rel="noopener" target="_blank">Paper 5.1</a>
+  </p>
+</footer>
+
+  </body>
+</html>

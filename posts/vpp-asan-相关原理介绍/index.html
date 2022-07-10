@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+
+
+<html lang="en-us">
+  <head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+
+  
+  <title>vpp asan 相关原理介绍 - Mercury</title>
+
+  
+  
+  <meta name="description" content="通过 mmap 映射的内存， clib_mem_vm_map_internal().clib_mem_unpoison()
+将 clib_mem_vm_map 前面的 clib_mem_vm_map_hdr_t 和 此次 mmap 的 clib_mem_vm_map 进行解毒，
+以便后面可以访问，
+clib_mem_vm_map_internal() 主要是 mmap 一段将要使用的 内存，
+调用该接口后可以直接读写内存(不是 PROT_NONE 状态)，
+vpp 很多地方分配内存都使用了该接口，
+注: dlmalloc 管理的 heap 都是通过 clib_mem_vm_map_internal() 分配的，但 clib_mem_vm_map_internal() 分配的内存不一定用于 heap ，如 vpp thread stack 、 vpp process stack 或 vpp memif 使用该接口分配的内存，
+asan 与 dlmalloc 相关接口 总结 创建 mheap 时会将几乎所有区域 poison ，
+分配时会将对应内存 unpoison ， 释放时会将对应内存 poison ，
+注: vpp 没有像 dpdk 那样在 分配区间的 header 和 trailer 处 poison ，应该检查不出微小的越界访问，" />
+  <meta name="author" content="" />
+  
+
+  
+  
+  
+  
+  
+  
+  <link rel="preload stylesheet" as="style" href="https://eiempleo.github.io/app.min.css" />
+
+  
+  <link rel="preload stylesheet" as="style" href="https://eiempleo.github.io/an-old-hope.min.css" />
+  <script
+    defer
+    src="https://eiempleo.github.io/highlight.min.js"
+    onload="hljs.initHighlightingOnLoad();"
+  ></script>
+  
+
+  
+  <link rel="preload" as="image" href="https://eiempleo.github.io/theme.png" />
+
+  
+
+  
+  <link rel="icon" href="https://eiempleo.github.io/favicon.ico" />
+  <link rel="apple-touch-icon" href="https://eiempleo.github.io/apple-touch-icon.png" />
+
+  
+  <meta name="generator" content="Hugo 0.99.0" />
+
+  
+  
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <meta property="og:title" content="vpp asan 相关原理介绍" />
+<meta property="og:description" content="通过 mmap 映射的内存， clib_mem_vm_map_internal().clib_mem_unpoison()
+将 clib_mem_vm_map 前面的 clib_mem_vm_map_hdr_t 和 此次 mmap 的 clib_mem_vm_map 进行解毒，
+以便后面可以访问，
+clib_mem_vm_map_internal() 主要是 mmap 一段将要使用的 内存，
+调用该接口后可以直接读写内存(不是 PROT_NONE 状态)，
+vpp 很多地方分配内存都使用了该接口，
+注: dlmalloc 管理的 heap 都是通过 clib_mem_vm_map_internal() 分配的，但 clib_mem_vm_map_internal() 分配的内存不一定用于 heap ，如 vpp thread stack 、 vpp process stack 或 vpp memif 使用该接口分配的内存，
+asan 与 dlmalloc 相关接口 总结 创建 mheap 时会将几乎所有区域 poison ，
+分配时会将对应内存 unpoison ， 释放时会将对应内存 poison ，
+注: vpp 没有像 dpdk 那样在 分配区间的 header 和 trailer 处 poison ，应该检查不出微小的越界访问，" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://eiempleo.github.io/posts/vpp-asan-%E7%9B%B8%E5%85%B3%E5%8E%9F%E7%90%86%E4%BB%8B%E7%BB%8D/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-06-20T15:36:00+08:00" />
+<meta property="article:modified_time" content="2022-06-20T15:36:00+08:00" />
+
+
+  
+  <meta itemprop="name" content="vpp asan 相关原理介绍">
+<meta itemprop="description" content="通过 mmap 映射的内存， clib_mem_vm_map_internal().clib_mem_unpoison()
+将 clib_mem_vm_map 前面的 clib_mem_vm_map_hdr_t 和 此次 mmap 的 clib_mem_vm_map 进行解毒，
+以便后面可以访问，
+clib_mem_vm_map_internal() 主要是 mmap 一段将要使用的 内存，
+调用该接口后可以直接读写内存(不是 PROT_NONE 状态)，
+vpp 很多地方分配内存都使用了该接口，
+注: dlmalloc 管理的 heap 都是通过 clib_mem_vm_map_internal() 分配的，但 clib_mem_vm_map_internal() 分配的内存不一定用于 heap ，如 vpp thread stack 、 vpp process stack 或 vpp memif 使用该接口分配的内存，
+asan 与 dlmalloc 相关接口 总结 创建 mheap 时会将几乎所有区域 poison ，
+分配时会将对应内存 unpoison ， 释放时会将对应内存 poison ，
+注: vpp 没有像 dpdk 那样在 分配区间的 header 和 trailer 处 poison ，应该检查不出微小的越界访问，"><meta itemprop="datePublished" content="2022-06-20T15:36:00+08:00" />
+<meta itemprop="dateModified" content="2022-06-20T15:36:00+08:00" />
+<meta itemprop="wordCount" content="328">
+<meta itemprop="keywords" content="" />
+  
+  <meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="vpp asan 相关原理介绍"/>
+<meta name="twitter:description" content="通过 mmap 映射的内存， clib_mem_vm_map_internal().clib_mem_unpoison()
+将 clib_mem_vm_map 前面的 clib_mem_vm_map_hdr_t 和 此次 mmap 的 clib_mem_vm_map 进行解毒，
+以便后面可以访问，
+clib_mem_vm_map_internal() 主要是 mmap 一段将要使用的 内存，
+调用该接口后可以直接读写内存(不是 PROT_NONE 状态)，
+vpp 很多地方分配内存都使用了该接口，
+注: dlmalloc 管理的 heap 都是通过 clib_mem_vm_map_internal() 分配的，但 clib_mem_vm_map_internal() 分配的内存不一定用于 heap ，如 vpp thread stack 、 vpp process stack 或 vpp memif 使用该接口分配的内存，
+asan 与 dlmalloc 相关接口 总结 创建 mheap 时会将几乎所有区域 poison ，
+分配时会将对应内存 unpoison ， 释放时会将对应内存 poison ，
+注: vpp 没有像 dpdk 那样在 分配区间的 header 和 trailer 处 poison ，应该检查不出微小的越界访问，"/>
+
+  
+  
+</head>
+
+
+  <body class="not-ready" data-menu="false">
+    <header class="header">
+  
+  <p class="logo">
+    <a class="site-name" href="https://eiempleo.github.io/">Mercury</a><a class="btn-dark"></a>
+  </p>
+  
+
+  <script>
+    let bodyClx = document.body.classList;
+    let btnDark = document.querySelector('.btn-dark');
+    let sysDark = window.matchMedia('(prefers-color-scheme: dark)');
+    let darkVal = localStorage.getItem('dark');
+
+    let setDark = (isDark) => {
+      bodyClx[isDark ? 'add' : 'remove']('dark');
+      localStorage.setItem('dark', isDark ? 'yes' : 'no');
+    };
+
+    setDark(darkVal ? darkVal === 'yes' : sysDark.matches);
+    requestAnimationFrame(() => bodyClx.remove('not-ready'));
+
+    btnDark.addEventListener('click', () => setDark(!bodyClx.contains('dark')));
+    sysDark.addEventListener('change', (event) => setDark(event.matches));
+  </script>
+
+  
+  
+
+  
+</header>
+
+
+    <main class="main">
+
+<article class="post-single">
+  <header class="post-title">
+    <p>
+      
+      <time>Jun 20, 2022</time>
+      
+      
+    </p>
+    <h1>vpp asan 相关原理介绍</h1>
+  </header>
+  <section class="post-content"><h2 id="通过-mmap-映射的内存">通过 mmap 映射的内存，</h2>
+<p>clib_mem_vm_map_internal().clib_mem_unpoison()<br>
+将 clib_mem_vm_map 前面的 clib_mem_vm_map_hdr_t 和 此次 mmap 的 clib_mem_vm_map 进行解毒，<br>
+以便后面可以访问，<br>
+clib_mem_vm_map_internal() 主要是 mmap 一段将要使用的 内存，<br>
+调用该接口后可以直接读写内存(不是 PROT_NONE 状态)，<br>
+vpp 很多地方分配内存都使用了该接口，</p>
+<p>注: dlmalloc 管理的 heap 都是通过 clib_mem_vm_map_internal() 分配的，但 clib_mem_vm_map_internal() 分配的内存不一定用于 heap ，如 vpp thread stack 、 vpp process stack 或 vpp memif 使用该接口分配的内存，</p>
+<h2 id="asan-与-dlmalloc-相关接口">asan 与 dlmalloc 相关接口</h2>
+<h3 id="总结">总结</h3>
+<p>创建 mheap 时会将几乎所有区域 poison ，<br>
+分配时会将对应内存 unpoison ， 释放时会将对应内存 poison ，<br>
+注: vpp 没有像 dpdk 那样在 分配区间的 header 和 trailer 处 poison ，应该检查不出微小的越界访问，</p>
+<h3 id="创建-mheap">创建 mheap</h3>
+<p>clib_mem_create_heap_internal().clib_mem_poison()<br>
+clib_mem_create_heap_internal(): 通过 dlmalloc 创建 mem heap ，<br>
+这里主要是从 ms-&gt;least_addr 开始 poison ， poison 的长度为 ms-&gt;footprint ，<br>
+ms-&gt;least_addr 在这个函数里为: mmap 映射内存的 起始地址 + strlen(name) ，<br>
+ms-&gt;footprint 在这个函数里为: mmap 映射内存的 size - strlen(name) ，</p>
+<h3 id="分配">分配，</h3>
+<p>clib_mem_heap_alloc_inline().clib_mem_unpoison()<br>
+clib_mem_heap_alloc_inline() 主要是从 dlmalloc 管理的 mem heap 内分配内存，<br>
+内存分配出来后，需要进行解毒，这样后面才可以使用，</p>
+<h3 id="释放">释放</h3>
+<p>clib_mem_free_s().clib_mem_unpoison()<br>
+clib_mem_free_s() 主要是从 dlmalloc 管理的 mem heap 内释放内存，<br>
+clib_mem_free_s().clib_mem_free().clib_mem_heap_free().mspace_free()<br>
+这个接口使用较少，<br>
+这里的解毒主要是为了将数据 清0 ，</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c" data-lang="c"><span style="display:flex;"><span>__clib_export <span style="color:#66d9ef">void</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">clib_mem_free_s</span> (<span style="color:#66d9ef">void</span> <span style="color:#f92672">*</span>p)
+</span></span><span style="display:flex;"><span>{ 
+</span></span><span style="display:flex;"><span>	uword size <span style="color:#f92672">=</span> clib_mem_size (p);
+</span></span><span style="display:flex;"><span>	clib_mem_unpoison (p, size);
+</span></span><span style="display:flex;"><span>	memset_s_inline (p, size, <span style="color:#ae81ff">0</span>, size);
+</span></span><span style="display:flex;"><span>	clib_mem_free (p);
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>通常的释放不会经过上面的函数 clib_mem_free_s() ，<br>
+clib_mem_free() 或 (_vec_free() 也会调用下面的接口)<br>
+.clib_mem_heap_free().clib_mem_poison()</p>
+<h2 id="asan-与-vec-相关接口">asan 与 vec 相关接口，</h2>
+<p>vec 内存属于 vpp mheap(通过 dlmalloc 管理) ，也就是 通过 dlmalloc 接口进行分配和释放，<br>
+分配时与 dlmalloc 类似，就是将多余的空间 poison ，<br>
+不一样的地方主要是 vec 通过 dlmalloc 分配出来的内存有时不一定都使用，需要将后面不使用的内存 poison ，<br>
+缩小 vector 长度时， 因为 不会释放内存到 dlmalloc heap ，<br>
+需要通过 _vec_update_len() 或 _vec_set_len() 将后面已经分配出来但没有使用的区域进行 poison ，<br>
+增加 vector 长度， 但没有超过 vector 已经分配的长度时， 此时不会再从 dlmalloc heap 中分配，<br>
+需要通过 _vec_update_len() 或 _vec_set_len() 将需要的 额外内存 unpoison ，</p>
+<h3 id="分配-1">分配，</h3>
+<p>_vec_alloc_internal().clib_mem_poison()<br>
+_vec_alloc_internal(): vpp vector 涉及到内存分配的很多流程都会使用这个接口，<br>
+如 vec_validate().vec_validate_hap()._vec_validate()._vec_alloc_internal()<br>
+_vec_add()._vec_alloc_internal()<br>
+_vec_add2()._vec_alloc_internal()<br>
+_clib_fifo_resize()._vec_alloc_internal()<br>
+_pool_init_fixed()._vec_alloc_internal()<br>
+通过 clib_mem_heap_alloc_aligned().clib_mem_heap_alloc_inline() 从 mheap 里分配内存，<br>
+分配接口分配后会对相应内存区域解毒，(dlmalloc heap 创建或释放 时都会 进行 poison)<br>
+随后会将多分配的但用不到的内存给 poison ，<br>
+clib_mem_poison (p + req_size, alloc_size - req_size);</p>
+<h3 id="调整-vector-长度">调整 vector 长度，</h3>
+<p>_vec_resize_internal()._vec_realloc_internal()</p>
+<p>增加长度时 和 分配类似， 会再次从 dlmalloc 里进行分配，<br>
+减少长度时 因为 不会释放内存到 dlmalloc heap ，这样 dlmalloc 释放接口不会调用，<br>
+需要通过 _vec_update_len() 将后面已经分配出来但没有使用的区域进行 poison ，</p>
+<p>还有很多其他接口，<br>
+如 _vec_resize() 等，</p>
+<h2 id="asan-与-pool-相关接口">asan 与 pool 相关接口，</h2>
+<p>pool 的内存基于 vector ，间接基于 dlmalloc ，<br>
+但 pool 分配出来的内存并不是用户都能使用的， 只有 pool_get() 获取的内存才可以使用， pool_put() 时需要再次 poison ，</p>
+<h3 id="分配-2">分配</h3>
+<p>pool_alloc_aligned_heap()._pool_alloc()<br>
+通过 vector 接口获取内存，<br>
+刚分配出来后因为没有给用户，需要全部 poison ，</p>
+<h3 id="pool_get">pool_get()</h3>
+<p>_pool_get().clib_mem_unpoison()</p>
+<p>主要将从 pool 分配出来的 element unpoison ，</p>
+<h3 id="pool_put">pool_put()</h3>
+<p>pool_put().pool_put_index()._pool_put_index().clib_mem_poison()<br>
+主要将 返回给 pool 的 element poison ，</p>
+</section>
+
+  
+  
+
+  
+  
+  
+  <nav class="post-nav">
+     
+    <a class="next" href="https://eiempleo.github.io/posts/dpdk-memory-asan-%E4%BB%8B%E7%BB%8D/"><span>dpdk asan 介绍</span><span>→</span></a>
+    
+  </nav>
+  
+
+  
+  
+</article>
+
+</main>
+
+    <footer class="footer">
+  <p>&copy; 2022 <a href="https://eiempleo.github.io/">Mercury</a></p>
+  <p>Powered by <a href="https://gohugo.io/" rel="noopener" target="_blank">Hugo️️</a>️</p>
+  <p>
+    <a href="https://github.com/nanxiaobei/hugo-paper" rel="noopener" target="_blank">Paper 5.1</a>
+  </p>
+</footer>
+
+  </body>
+</html>

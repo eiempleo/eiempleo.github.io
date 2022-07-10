@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+
+
+<html lang="en-us">
+  <head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+
+  
+  <title>dpdk pcie 配置空间 和 bar 的映射介绍 - Mercury</title>
+
+  
+  
+  <meta name="description" content="pcie 配置空间， /sys/class/uio/uio0/device/config 为配置空间， pci_uio_map_resource().pci_uio_alloc_resource() 保存其 fd 在 dev-&gt;intr_handle-&gt;dev_fd 里， rte_pci_read_config().pci_uio_read_config() 通过 fd(dev-&gt;intr_handle-&gt;dev_fd) 和 pread 进行读取，
+pcie bar 空间， dev-&gt;mem_resource 为 bar 空间， rte_pci_scan().pci_scan_one().pci_parse_sysfs_resource() 通过读取 /sys/bus/pci/devices/0000:02:00.2/ 等文件夹的 resource 文件 将物理地址保存在 dev-&gt;mem_resource[res_idx].phys_addr 里， dpdk 并没有使用 igb_uio 来获取 pcie bar 的物理地址，而是通过 Linux 映射的 resource 文件直接读取的，
+在 probe 时， 通过 pci_uio_map_resource().pci_uio_map_resource_by_index() 将 bar 的物理地址 映射到 dpdk 的 虚拟地址 里，(用的是预留的最后一部分虚拟地址，)" />
+  <meta name="author" content="" />
+  
+
+  
+  
+  
+  
+  
+  
+  <link rel="preload stylesheet" as="style" href="https://eiempleo.github.io/app.min.css" />
+
+  
+  <link rel="preload stylesheet" as="style" href="https://eiempleo.github.io/an-old-hope.min.css" />
+  <script
+    defer
+    src="https://eiempleo.github.io/highlight.min.js"
+    onload="hljs.initHighlightingOnLoad();"
+  ></script>
+  
+
+  
+  <link rel="preload" as="image" href="https://eiempleo.github.io/theme.png" />
+
+  
+
+  
+  <link rel="icon" href="https://eiempleo.github.io/favicon.ico" />
+  <link rel="apple-touch-icon" href="https://eiempleo.github.io/apple-touch-icon.png" />
+
+  
+  <meta name="generator" content="Hugo 0.99.0" />
+
+  
+  
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <meta property="og:title" content="dpdk pcie 配置空间 和 bar 的映射介绍" />
+<meta property="og:description" content="pcie 配置空间， /sys/class/uio/uio0/device/config 为配置空间， pci_uio_map_resource().pci_uio_alloc_resource() 保存其 fd 在 dev-&gt;intr_handle-&gt;dev_fd 里， rte_pci_read_config().pci_uio_read_config() 通过 fd(dev-&gt;intr_handle-&gt;dev_fd) 和 pread 进行读取，
+pcie bar 空间， dev-&gt;mem_resource 为 bar 空间， rte_pci_scan().pci_scan_one().pci_parse_sysfs_resource() 通过读取 /sys/bus/pci/devices/0000:02:00.2/ 等文件夹的 resource 文件 将物理地址保存在 dev-&gt;mem_resource[res_idx].phys_addr 里， dpdk 并没有使用 igb_uio 来获取 pcie bar 的物理地址，而是通过 Linux 映射的 resource 文件直接读取的，
+在 probe 时， 通过 pci_uio_map_resource().pci_uio_map_resource_by_index() 将 bar 的物理地址 映射到 dpdk 的 虚拟地址 里，(用的是预留的最后一部分虚拟地址，)" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://eiempleo.github.io/posts/dpdk-pcie-%E9%85%8D%E7%BD%AE%E7%A9%BA%E9%97%B4-%E5%92%8C-bar-%E7%9A%84%E6%98%A0%E5%B0%84-%E4%BB%8B%E7%BB%8D/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-06-13T15:00:00+08:00" />
+<meta property="article:modified_time" content="2022-06-13T15:00:00+08:00" />
+
+
+  
+  <meta itemprop="name" content="dpdk pcie 配置空间 和 bar 的映射介绍">
+<meta itemprop="description" content="pcie 配置空间， /sys/class/uio/uio0/device/config 为配置空间， pci_uio_map_resource().pci_uio_alloc_resource() 保存其 fd 在 dev-&gt;intr_handle-&gt;dev_fd 里， rte_pci_read_config().pci_uio_read_config() 通过 fd(dev-&gt;intr_handle-&gt;dev_fd) 和 pread 进行读取，
+pcie bar 空间， dev-&gt;mem_resource 为 bar 空间， rte_pci_scan().pci_scan_one().pci_parse_sysfs_resource() 通过读取 /sys/bus/pci/devices/0000:02:00.2/ 等文件夹的 resource 文件 将物理地址保存在 dev-&gt;mem_resource[res_idx].phys_addr 里， dpdk 并没有使用 igb_uio 来获取 pcie bar 的物理地址，而是通过 Linux 映射的 resource 文件直接读取的，
+在 probe 时， 通过 pci_uio_map_resource().pci_uio_map_resource_by_index() 将 bar 的物理地址 映射到 dpdk 的 虚拟地址 里，(用的是预留的最后一部分虚拟地址，)"><meta itemprop="datePublished" content="2022-06-13T15:00:00+08:00" />
+<meta itemprop="dateModified" content="2022-06-13T15:00:00+08:00" />
+<meta itemprop="wordCount" content="56">
+<meta itemprop="keywords" content="" />
+  
+  <meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="dpdk pcie 配置空间 和 bar 的映射介绍"/>
+<meta name="twitter:description" content="pcie 配置空间， /sys/class/uio/uio0/device/config 为配置空间， pci_uio_map_resource().pci_uio_alloc_resource() 保存其 fd 在 dev-&gt;intr_handle-&gt;dev_fd 里， rte_pci_read_config().pci_uio_read_config() 通过 fd(dev-&gt;intr_handle-&gt;dev_fd) 和 pread 进行读取，
+pcie bar 空间， dev-&gt;mem_resource 为 bar 空间， rte_pci_scan().pci_scan_one().pci_parse_sysfs_resource() 通过读取 /sys/bus/pci/devices/0000:02:00.2/ 等文件夹的 resource 文件 将物理地址保存在 dev-&gt;mem_resource[res_idx].phys_addr 里， dpdk 并没有使用 igb_uio 来获取 pcie bar 的物理地址，而是通过 Linux 映射的 resource 文件直接读取的，
+在 probe 时， 通过 pci_uio_map_resource().pci_uio_map_resource_by_index() 将 bar 的物理地址 映射到 dpdk 的 虚拟地址 里，(用的是预留的最后一部分虚拟地址，)"/>
+
+  
+  
+</head>
+
+
+  <body class="not-ready" data-menu="false">
+    <header class="header">
+  
+  <p class="logo">
+    <a class="site-name" href="https://eiempleo.github.io/">Mercury</a><a class="btn-dark"></a>
+  </p>
+  
+
+  <script>
+    let bodyClx = document.body.classList;
+    let btnDark = document.querySelector('.btn-dark');
+    let sysDark = window.matchMedia('(prefers-color-scheme: dark)');
+    let darkVal = localStorage.getItem('dark');
+
+    let setDark = (isDark) => {
+      bodyClx[isDark ? 'add' : 'remove']('dark');
+      localStorage.setItem('dark', isDark ? 'yes' : 'no');
+    };
+
+    setDark(darkVal ? darkVal === 'yes' : sysDark.matches);
+    requestAnimationFrame(() => bodyClx.remove('not-ready'));
+
+    btnDark.addEventListener('click', () => setDark(!bodyClx.contains('dark')));
+    sysDark.addEventListener('change', (event) => setDark(event.matches));
+  </script>
+
+  
+  
+
+  
+</header>
+
+
+    <main class="main">
+
+<article class="post-single">
+  <header class="post-title">
+    <p>
+      
+      <time>Jun 13, 2022</time>
+      
+      
+    </p>
+    <h1>dpdk pcie 配置空间 和 bar 的映射介绍</h1>
+  </header>
+  <section class="post-content"><h2 id="pcie-配置空间">pcie 配置空间，</h2>
+<p>/sys/class/uio/uio0/device/config 为配置空间，
+pci_uio_map_resource().pci_uio_alloc_resource() 保存其 fd 在 dev-&gt;intr_handle-&gt;dev_fd 里，
+rte_pci_read_config().pci_uio_read_config() 通过 fd(dev-&gt;intr_handle-&gt;dev_fd) 和 pread 进行读取，</p>
+<h2 id="pcie-bar-空间">pcie bar 空间，</h2>
+<p>dev-&gt;mem_resource 为 bar 空间，
+rte_pci_scan().pci_scan_one().pci_parse_sysfs_resource() 通过读取 /sys/bus/pci/devices/0000:02:00.2/ 等文件夹的 resource 文件
+    将物理地址保存在 dev-&gt;mem_resource[res_idx].phys_addr 里，
+dpdk 并没有使用 igb_uio 来获取 pcie bar 的物理地址，而是通过 Linux 映射的 resource 文件直接读取的，</p>
+<p>在 probe 时， 通过 pci_uio_map_resource().pci_uio_map_resource_by_index() 将 bar 的物理地址
+  映射到 dpdk 的 虚拟地址 里，(用的是预留的最后一部分虚拟地址，)</p>
+</section>
+
+  
+  
+
+  
+  
+  
+  <nav class="post-nav">
+    
+    <a class="prev" href="https://eiempleo.github.io/posts/dpdk-memory-asan-%E4%BB%8B%E7%BB%8D/"><span>←</span><span>dpdk asan 介绍</span></a>
+     
+    <a class="next" href="https://eiempleo.github.io/posts/dpdk-%E7%BD%91%E5%8D%A1%E4%B8%AD%E6%96%AD%E7%9A%84%E5%A4%84%E7%90%86%E6%B5%81%E7%A8%8Bi40e/"><span>dpdk 网卡中断处理流程(i40e)</span><span>→</span></a>
+    
+  </nav>
+  
+
+  
+  
+</article>
+
+</main>
+
+    <footer class="footer">
+  <p>&copy; 2022 <a href="https://eiempleo.github.io/">Mercury</a></p>
+  <p>Powered by <a href="https://gohugo.io/" rel="noopener" target="_blank">Hugo️️</a>️</p>
+  <p>
+    <a href="https://github.com/nanxiaobei/hugo-paper" rel="noopener" target="_blank">Paper 5.1</a>
+  </p>
+</footer>
+
+  </body>
+</html>

@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+
+
+<html lang="en-us">
+  <head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+
+  
+  <title>dpdk 网卡中断处理流程(i40e) - Mercury</title>
+
+  
+  
+  <meta name="description" content="参考 https://www.jianshu.com/p/9eb47110cf91
+这个链接整理的很完善，基于 dpdk 2203 、 i40e 整理，
+介绍， 主要处理 网卡的 各种中断消息，
+比如 pf vf 之间的通信: i40e_dev_interrupt_handler().i40e_dev_handle_aq_msg().i40e_pf_host_handle_vf_msg()
+link change 消息: i40e_dev_interrupt_handler().i40e_dev_handle_aq_msg().i40e_dev_link_update()
+这种中断(不处理收发包)对性能要求不高， 通过 在 main lcore 上单独开了个线程进行处理，
+中断类型现在应该一般都是 msi-x ，
+dpdk 收发包没有使用中断，
+相关代码， kernel uio 设备: drivers/uio/uio.c
+中断处理线程的创建， rte_eal_init().rte_eal_intr_init()
+ pipe(intr_pipe.pipefd)
+创建 pipe intr_pipe.pipefd ，随后添加 intr_pipe.readfd 到 epoll 里，
+后面 注册中断 fd 和 回调时， rte_intr_callback_register() 更新 intr_sources 后会通过 epoll 监听的 pipe
+来通知 eal_intr_thread_main 重建 the wait list of epoll
+create a pipe which will be waited by epoll and notified to rebuild the wait list of epoll." />
+  <meta name="author" content="" />
+  
+
+  
+  
+  
+  
+  
+  
+  <link rel="preload stylesheet" as="style" href="https://eiempleo.github.io/app.min.css" />
+
+  
+  <link rel="preload stylesheet" as="style" href="https://eiempleo.github.io/an-old-hope.min.css" />
+  <script
+    defer
+    src="https://eiempleo.github.io/highlight.min.js"
+    onload="hljs.initHighlightingOnLoad();"
+  ></script>
+  
+
+  
+  <link rel="preload" as="image" href="https://eiempleo.github.io/theme.png" />
+
+  
+
+  
+  <link rel="icon" href="https://eiempleo.github.io/favicon.ico" />
+  <link rel="apple-touch-icon" href="https://eiempleo.github.io/apple-touch-icon.png" />
+
+  
+  <meta name="generator" content="Hugo 0.99.0" />
+
+  
+  
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <meta property="og:title" content="dpdk 网卡中断处理流程(i40e)" />
+<meta property="og:description" content="参考 https://www.jianshu.com/p/9eb47110cf91
+这个链接整理的很完善，基于 dpdk 2203 、 i40e 整理，
+介绍， 主要处理 网卡的 各种中断消息，
+比如 pf vf 之间的通信: i40e_dev_interrupt_handler().i40e_dev_handle_aq_msg().i40e_pf_host_handle_vf_msg()
+link change 消息: i40e_dev_interrupt_handler().i40e_dev_handle_aq_msg().i40e_dev_link_update()
+这种中断(不处理收发包)对性能要求不高， 通过 在 main lcore 上单独开了个线程进行处理，
+中断类型现在应该一般都是 msi-x ，
+dpdk 收发包没有使用中断，
+相关代码， kernel uio 设备: drivers/uio/uio.c
+中断处理线程的创建， rte_eal_init().rte_eal_intr_init()
+ pipe(intr_pipe.pipefd)
+创建 pipe intr_pipe.pipefd ，随后添加 intr_pipe.readfd 到 epoll 里，
+后面 注册中断 fd 和 回调时， rte_intr_callback_register() 更新 intr_sources 后会通过 epoll 监听的 pipe
+来通知 eal_intr_thread_main 重建 the wait list of epoll
+create a pipe which will be waited by epoll and notified to rebuild the wait list of epoll." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://eiempleo.github.io/posts/dpdk-%E7%BD%91%E5%8D%A1%E4%B8%AD%E6%96%AD%E7%9A%84%E5%A4%84%E7%90%86%E6%B5%81%E7%A8%8Bi40e/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-05-30T09:00:00+08:00" />
+<meta property="article:modified_time" content="2022-05-30T09:00:00+08:00" />
+
+
+  
+  <meta itemprop="name" content="dpdk 网卡中断处理流程(i40e)">
+<meta itemprop="description" content="参考 https://www.jianshu.com/p/9eb47110cf91
+这个链接整理的很完善，基于 dpdk 2203 、 i40e 整理，
+介绍， 主要处理 网卡的 各种中断消息，
+比如 pf vf 之间的通信: i40e_dev_interrupt_handler().i40e_dev_handle_aq_msg().i40e_pf_host_handle_vf_msg()
+link change 消息: i40e_dev_interrupt_handler().i40e_dev_handle_aq_msg().i40e_dev_link_update()
+这种中断(不处理收发包)对性能要求不高， 通过 在 main lcore 上单独开了个线程进行处理，
+中断类型现在应该一般都是 msi-x ，
+dpdk 收发包没有使用中断，
+相关代码， kernel uio 设备: drivers/uio/uio.c
+中断处理线程的创建， rte_eal_init().rte_eal_intr_init()
+ pipe(intr_pipe.pipefd)
+创建 pipe intr_pipe.pipefd ，随后添加 intr_pipe.readfd 到 epoll 里，
+后面 注册中断 fd 和 回调时， rte_intr_callback_register() 更新 intr_sources 后会通过 epoll 监听的 pipe
+来通知 eal_intr_thread_main 重建 the wait list of epoll
+create a pipe which will be waited by epoll and notified to rebuild the wait list of epoll."><meta itemprop="datePublished" content="2022-05-30T09:00:00+08:00" />
+<meta itemprop="dateModified" content="2022-05-30T09:00:00+08:00" />
+<meta itemprop="wordCount" content="456">
+<meta itemprop="keywords" content="" />
+  
+  <meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="dpdk 网卡中断处理流程(i40e)"/>
+<meta name="twitter:description" content="参考 https://www.jianshu.com/p/9eb47110cf91
+这个链接整理的很完善，基于 dpdk 2203 、 i40e 整理，
+介绍， 主要处理 网卡的 各种中断消息，
+比如 pf vf 之间的通信: i40e_dev_interrupt_handler().i40e_dev_handle_aq_msg().i40e_pf_host_handle_vf_msg()
+link change 消息: i40e_dev_interrupt_handler().i40e_dev_handle_aq_msg().i40e_dev_link_update()
+这种中断(不处理收发包)对性能要求不高， 通过 在 main lcore 上单独开了个线程进行处理，
+中断类型现在应该一般都是 msi-x ，
+dpdk 收发包没有使用中断，
+相关代码， kernel uio 设备: drivers/uio/uio.c
+中断处理线程的创建， rte_eal_init().rte_eal_intr_init()
+ pipe(intr_pipe.pipefd)
+创建 pipe intr_pipe.pipefd ，随后添加 intr_pipe.readfd 到 epoll 里，
+后面 注册中断 fd 和 回调时， rte_intr_callback_register() 更新 intr_sources 后会通过 epoll 监听的 pipe
+来通知 eal_intr_thread_main 重建 the wait list of epoll
+create a pipe which will be waited by epoll and notified to rebuild the wait list of epoll."/>
+
+  
+  
+</head>
+
+
+  <body class="not-ready" data-menu="false">
+    <header class="header">
+  
+  <p class="logo">
+    <a class="site-name" href="https://eiempleo.github.io/">Mercury</a><a class="btn-dark"></a>
+  </p>
+  
+
+  <script>
+    let bodyClx = document.body.classList;
+    let btnDark = document.querySelector('.btn-dark');
+    let sysDark = window.matchMedia('(prefers-color-scheme: dark)');
+    let darkVal = localStorage.getItem('dark');
+
+    let setDark = (isDark) => {
+      bodyClx[isDark ? 'add' : 'remove']('dark');
+      localStorage.setItem('dark', isDark ? 'yes' : 'no');
+    };
+
+    setDark(darkVal ? darkVal === 'yes' : sysDark.matches);
+    requestAnimationFrame(() => bodyClx.remove('not-ready'));
+
+    btnDark.addEventListener('click', () => setDark(!bodyClx.contains('dark')));
+    sysDark.addEventListener('change', (event) => setDark(event.matches));
+  </script>
+
+  
+  
+
+  
+</header>
+
+
+    <main class="main">
+
+<article class="post-single">
+  <header class="post-title">
+    <p>
+      
+      <time>May 30, 2022</time>
+      
+      
+    </p>
+    <h1>dpdk 网卡中断处理流程(i40e)</h1>
+  </header>
+  <section class="post-content"><p>参考 <a href="https://www.jianshu.com/p/9eb47110cf91">https://www.jianshu.com/p/9eb47110cf91</a><br>
+这个链接整理的很完善，基于 dpdk 2203 、 i40e 整理，</p>
+<h2 id="介绍">介绍，</h2>
+<p>主要处理 网卡的 各种中断消息，<br>
+    比如 pf vf 之间的通信: i40e_dev_interrupt_handler().i40e_dev_handle_aq_msg().i40e_pf_host_handle_vf_msg()<br>
+    link change 消息: i40e_dev_interrupt_handler().i40e_dev_handle_aq_msg().i40e_dev_link_update()<br>
+这种中断(不处理收发包)对性能要求不高， 通过 在 main lcore 上单独开了个线程进行处理，<br>
+中断类型现在应该一般都是 msi-x ，<br>
+dpdk 收发包没有使用中断，</p>
+<h2 id="相关代码">相关代码，</h2>
+<p>kernel uio 设备: drivers/uio/uio.c</p>
+<h2 id="中断处理线程的创建">中断处理线程的创建，</h2>
+<p>rte_eal_init().rte_eal_intr_init()</p>
+<ol>
+<li>pipe(intr_pipe.pipefd)<br>
+    创建 pipe intr_pipe.pipefd ，随后添加 intr_pipe.readfd 到 epoll 里，<br>
+    后面 注册中断 fd 和 回调时， rte_intr_callback_register() 更新 intr_sources 后会通过 epoll 监听的 pipe<br>
+        来通知 eal_intr_thread_main 重建 the wait list of epoll<br>
+    create a pipe which will be waited by epoll and notified to rebuild the wait list of epoll.</li>
+<li>rte_ctrl_thread_create(&amp;intr_thread, &ldquo;eal-intr-thread&rdquo;, NULL, eal_intr_thread_main, NULL);</li>
+</ol>
+<p>gdb 可以看到 中断线程(vpp 内部)</p>
+<pre tabindex="0"><code class="language-gdb" data-lang="gdb">Thread 2 (Thread 0x7fffadf23700 (LWP 424582) &#34;eal-intr-thread&#34;):
+#0  0x00007ffff6bdb116 in epoll_wait (epfd=14, events=0x7fffadf22d50, maxevents=5, timeout=-1) at ../sysdeps/unix/sysv/linux/epoll_wait.c:30
+#1  0x00007fffb1ebdb36 in eal_intr_handle_interrupts (pfd=14, totalfds=5) at ../src-dpdk/lib/eal/linux/eal_interrupts.c:1077
+#2  0x00007fffb1ebdd4d in eal_intr_thread_main (arg=0x0) at ../src-dpdk/lib/eal/linux/eal_interrupts.c:1163
+#3  0x00007fffb1e9a007 in ctrl_thread_init (arg=0x55555559fcc0) at ../src-dpdk/lib/eal/common/eal_common_thread.c:203
+#4  0x00007ffff6ec9ea7 in start_thread (arg=&lt;optimized out&gt;) at pthread_create.c:477
+#5  0x00007ffff6bdadef in clone () at ../sysdeps/unix/sysv/linux/x86_64/clone.S:95
+</code></pre><h2 id="中断处理线程逻辑">中断处理线程逻辑</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c" data-lang="c"><span style="display:flex;"><span>eal_intr_thread_main().eal_intr_handle_interrupts() {
+</span></span><span style="display:flex;"><span>	epoll_wait()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>	<span style="color:#75715e">/* 这里会处理所有的中断事件， 同时处理 pipe 事件 */</span>
+</span></span><span style="display:flex;"><span>	eal_intr_process_interrupts()
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>eal_intr_process_interrupts() 中 对 pipe 事件的处理，<br>
+    这里只是简单的 return ， 跳到 eal_intr_handle_interrupts() 函数里的 for 循环起始位置，<br>
+    随后可以根据 intr_sources 重建 the wait list of epoll ，</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c" data-lang="c"><span style="display:flex;"><span><span style="color:#75715e">/**
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"> * if the pipe fd is ready to read, return out to
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"> * rebuild the wait list.
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"> */</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">if</span> (events[n].data.fd <span style="color:#f92672">==</span> intr_pipe.readfd){
+</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">int</span> r <span style="color:#f92672">=</span> read(intr_pipe.readfd, buf.charbuf,
+</span></span><span style="display:flex;"><span>					<span style="color:#66d9ef">sizeof</span>(buf.charbuf));
+</span></span><span style="display:flex;"><span>	RTE_SET_USED(r);
+</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">return</span> <span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>;
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><h2 id="获取中断-fd-">获取中断 fd ，</h2>
+<p>对于 igb_uio 驱动，<br>
+pcie probe 时， pci_uio_map_resource() 根据 /sys/bus/pci/devices/&lsquo;pci address&rsquo;/ 找到 对应的 /dev/uiox ，<br>
+随后打开， 保存在 dev-&gt;intr_handle-&gt;fd 里，<br>
+open /dev/uiox 时会触发 uio_open()<br>
+uio_open() 会注册中断，<br>
+调用链如下，</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c" data-lang="c"><span style="display:flex;"><span>uio_open().igbuio_pci_open().igbuio_pci_enable_interrupts() {
+</span></span><span style="display:flex;"><span>	pci_alloc_irq_vectors(udev<span style="color:#f92672">-&gt;</span>pdev, <span style="color:#ae81ff">1</span>, <span style="color:#ae81ff">1</span>, PCI_IRQ_MSIX);
+</span></span><span style="display:flex;"><span>	request_irq(udev<span style="color:#f92672">-&gt;</span>info.irq, igbuio_pci_irqhandler, udev<span style="color:#f92672">-&gt;</span>info.irq_flags, udev<span style="color:#f92672">-&gt;</span>info.name, udev);
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>中断回调为 igbuio_pci_irqhandler() ，</p>
+<p>vpp 启动后， dmesg 可以看到下面打印，<br>
+[Wed Jun 29 10:10:47 2022] igb_uio 0000:04:00.0: uio device registered with irq 34<br>
+[Wed Jun 29 10:10:47 2022] igb_uio 0000:06:00.0: uio device registered with irq 35<br>
+这个就是 igbuio_pci_enable_interrupts() 里打印的，</p>
+<h2 id="中断的注册和使能">中断的注册和使能，</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c" data-lang="c"><span style="display:flex;"><span>eth_i40e_dev_init() {
+</span></span><span style="display:flex;"><span>	<span style="color:#75715e">/**
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">	 * 注册中断: register callback func to eal lib 
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">	 * rte_intr_callback_register() 将 中断 fd 和 回调 添加到 epoll 里，
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">	 */</span>
+</span></span><span style="display:flex;"><span>	rte_intr_callback_register(intr_handle,
+</span></span><span style="display:flex;"><span>					i40e_dev_interrupt_handler, dev);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>	<span style="color:#75715e">/* 使能中断 */</span>
+</span></span><span style="display:flex;"><span>	rte_intr_enable(intr_handle);
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>rte_intr_callback_register()
+  将 中断 fd 和 回调 添加到 intr_sources 里，
+    intr_sources 是一个动态数组， 类型为 rte_intr_source ， 每个 intr_handle 对应其中一个元素，
+    rte_intr_source 的 callbacks 字段 存储这个 intr_handle 对应的所有中断回调，
+  通过 intr_pipe.writefd pipe 文件通知(epoll) eal_intr_thread_main 来重新构造 wait list of epoll ，</p>
+<p>？？？ rte_intr_enable()
+对于 igb_uio 驱动，会调用 uio_intr_enable() ，<br>
+  主要执行 write(rte_intr_fd_get(intr_handle), &amp;value, sizeof(value));<br>
+  会触发 uio_write() ， uio_write() 主要执行 idev-&gt;info-&gt;irqcontrol ，<br>
+    该回调在 igb_uio 驱动 probe(igbuio_pci_probe) 时 设置为 igbuio_pci_irqcontrol()<br>
+  igbuio_pci_irqcontrol() 会执行 pci_msi_mask_irq() ， 具体什么作用不了解，</p>
+<h2 id="发生中断时的处理">发生中断时的处理，</h2>
+<p>调用 rte_intr_callback_register() 时，已经将 /dev/uiox 对应的 fd 添加到了 epoll 监听队列，<br>
+在 kernel 中会调用 uio_poll 等待事件到来，</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c" data-lang="c"><span style="display:flex;"><span>uio_poll() {
+</span></span><span style="display:flex;"><span>	poll_wait(filep, <span style="color:#f92672">&amp;</span>idev<span style="color:#f92672">-&gt;</span>wait, wait);
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>前面已经注册了中断的回调为 igbuio_pci_irqhandler() ，<br>
+igbuio_pci_irqhandler().uio_event_notify() 会唤醒 poll ，</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c" data-lang="c"><span style="display:flex;"><span>uio_event_notify() {
+</span></span><span style="display:flex;"><span>	<span style="color:#75715e">/* 增加 poll event */</span>
+</span></span><span style="display:flex;"><span>	atomic_inc(<span style="color:#f92672">&amp;</span>idev<span style="color:#f92672">-&gt;</span>event);
+</span></span><span style="display:flex;"><span>	<span style="color:#75715e">/* 唤醒等待队列的进程的，比如 这里的 中断处理线程 &#34;eal-intr-thread&#34; */</span>
+</span></span><span style="display:flex;"><span>	wake_up_interruptible(<span style="color:#f92672">&amp;</span>idev<span style="color:#f92672">-&gt;</span>wait);
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>此时 已经进入了 &ldquo;eal-intr-thread&rdquo; ，<br>
+被唤醒的进程(即中断处理线程)再次调用 uio_poll() 获取发生的事件，<br>
+此时会返回 POLLIN | POLLRDNORM ，然后再调用 read() 读取数据，<br>
+read() 该设备会触发 uio_read() 读取中断信息，<br>
+读取到中断事件后， 会调用 中断来源对应的回调，如 之前注册的 i40e_dev_interrupt_handler() ，</p>
+</section>
+
+  
+  
+
+  
+  
+  
+  <nav class="post-nav">
+    
+    <a class="prev" href="https://eiempleo.github.io/posts/dpdk-pcie-%E9%85%8D%E7%BD%AE%E7%A9%BA%E9%97%B4-%E5%92%8C-bar-%E7%9A%84%E6%98%A0%E5%B0%84-%E4%BB%8B%E7%BB%8D/"><span>←</span><span>dpdk pcie 配置空间 和 bar 的映射介绍</span></a>
+     
+    <a class="next" href="https://eiempleo.github.io/posts/dpdk-%E7%BD%91%E5%8D%A1-%E9%85%8D%E7%BD%AE-%E5%92%8C-%E6%94%B6%E5%8F%91%E5%8C%85-%E7%9B%B8%E5%85%B3%E6%B5%81%E7%A8%8B%E4%BB%8B%E7%BB%8Di40e/"><span>dpdk 网卡 配置 和 收发包 相关流程介绍（i40e）</span><span>→</span></a>
+    
+  </nav>
+  
+
+  
+  
+</article>
+
+</main>
+
+    <footer class="footer">
+  <p>&copy; 2022 <a href="https://eiempleo.github.io/">Mercury</a></p>
+  <p>Powered by <a href="https://gohugo.io/" rel="noopener" target="_blank">Hugo️️</a>️</p>
+  <p>
+    <a href="https://github.com/nanxiaobei/hugo-paper" rel="noopener" target="_blank">Paper 5.1</a>
+  </p>
+</footer>
+
+  </body>
+</html>

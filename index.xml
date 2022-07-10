@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Mercury</title>
+    <link>https://eiempleo.github.io/</link>
+    <description>Recent content on Mercury</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Mon, 20 Jun 2022 15:36:00 +0800</lastBuildDate><atom:link href="https://eiempleo.github.io/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>vpp asan 相关原理介绍</title>
+      <link>https://eiempleo.github.io/posts/vpp-asan-%E7%9B%B8%E5%85%B3%E5%8E%9F%E7%90%86%E4%BB%8B%E7%BB%8D/</link>
+      <pubDate>Mon, 20 Jun 2022 15:36:00 +0800</pubDate>
+      
+      <guid>https://eiempleo.github.io/posts/vpp-asan-%E7%9B%B8%E5%85%B3%E5%8E%9F%E7%90%86%E4%BB%8B%E7%BB%8D/</guid>
+      <description>通过 mmap 映射的内存， clib_mem_vm_map_internal().clib_mem_unpoison()
+将 clib_mem_vm_map 前面的 clib_mem_vm_map_hdr_t 和 此次 mmap 的 clib_mem_vm_map 进行解毒，
+以便后面可以访问，
+clib_mem_vm_map_internal() 主要是 mmap 一段将要使用的 内存，
+调用该接口后可以直接读写内存(不是 PROT_NONE 状态)，
+vpp 很多地方分配内存都使用了该接口，
+注: dlmalloc 管理的 heap 都是通过 clib_mem_vm_map_internal() 分配的，但 clib_mem_vm_map_internal() 分配的内存不一定用于 heap ，如 vpp thread stack 、 vpp process stack 或 vpp memif 使用该接口分配的内存，
+asan 与 dlmalloc 相关接口 总结 创建 mheap 时会将几乎所有区域 poison ，
+分配时会将对应内存 unpoison ， 释放时会将对应内存 poison ，
+注: vpp 没有像 dpdk 那样在 分配区间的 header 和 trailer 处 poison ，应该检查不出微小的越界访问，</description>
+    </item>
+    
+    <item>
+      <title>dpdk asan 介绍</title>
+      <link>https://eiempleo.github.io/posts/dpdk-memory-asan-%E4%BB%8B%E7%BB%8D/</link>
+      <pubDate>Fri, 17 Jun 2022 15:00:00 +0800</pubDate>
+      
+      <guid>https://eiempleo.github.io/posts/dpdk-memory-asan-%E4%BB%8B%E7%BB%8D/</guid>
+      <description>相关接口， asan_set_zone() 主要是将 应用程序内存 对应的 shadow memory 赋值，
+比如 释放内存时 会通过 asan_set_freezone() 将对应的 shadow memory 设置为 ASAN_MEM_FREE_FLAG(0xfd) ，
+分配内存时 通过 asan_clear_alloczone() 将对应的 shadow memory 设置为 0x0(也就是可访问状态，)
+这样 asan 在检查内存时就可以根据 shadow memory 进行判断，
+asan_set_redzone() 感觉就是将 一个 malloc_elem 的 实际分配空间的前后设置 redzone
+也就是将 前后空间对应的 shadow memory 设置为 ASAN_MEM_REDZONE_FLAG: 0xfa ，
+head_redzone: 将 malloc_elem 末尾的 16字节(asan_cookie[2]) 设置为 redzone ，所以 asan_cookie[2] 必须是 malloc_elem 最后的成员，
+tail_redzone: 将 MALLOC_ELEM_TRAILER_LEN 的前 16字节 设置为 redzone ，
+参数 user_size 为实际分配的空间大小，</description>
+    </item>
+    
+    <item>
+      <title>dpdk pcie 配置空间 和 bar 的映射介绍</title>
+      <link>https://eiempleo.github.io/posts/dpdk-pcie-%E9%85%8D%E7%BD%AE%E7%A9%BA%E9%97%B4-%E5%92%8C-bar-%E7%9A%84%E6%98%A0%E5%B0%84-%E4%BB%8B%E7%BB%8D/</link>
+      <pubDate>Mon, 13 Jun 2022 15:00:00 +0800</pubDate>
+      
+      <guid>https://eiempleo.github.io/posts/dpdk-pcie-%E9%85%8D%E7%BD%AE%E7%A9%BA%E9%97%B4-%E5%92%8C-bar-%E7%9A%84%E6%98%A0%E5%B0%84-%E4%BB%8B%E7%BB%8D/</guid>
+      <description>pcie 配置空间， /sys/class/uio/uio0/device/config 为配置空间， pci_uio_map_resource().pci_uio_alloc_resource() 保存其 fd 在 dev-&amp;gt;intr_handle-&amp;gt;dev_fd 里， rte_pci_read_config().pci_uio_read_config() 通过 fd(dev-&amp;gt;intr_handle-&amp;gt;dev_fd) 和 pread 进行读取，
+pcie bar 空间， dev-&amp;gt;mem_resource 为 bar 空间， rte_pci_scan().pci_scan_one().pci_parse_sysfs_resource() 通过读取 /sys/bus/pci/devices/0000:02:00.2/ 等文件夹的 resource 文件 将物理地址保存在 dev-&amp;gt;mem_resource[res_idx].phys_addr 里， dpdk 并没有使用 igb_uio 来获取 pcie bar 的物理地址，而是通过 Linux 映射的 resource 文件直接读取的，
+在 probe 时， 通过 pci_uio_map_resource().pci_uio_map_resource_by_index() 将 bar 的物理地址 映射到 dpdk 的 虚拟地址 里，(用的是预留的最后一部分虚拟地址，)</description>
+    </item>
+    
+    <item>
+      <title>dpdk 网卡中断处理流程(i40e)</title>
+      <link>https://eiempleo.github.io/posts/dpdk-%E7%BD%91%E5%8D%A1%E4%B8%AD%E6%96%AD%E7%9A%84%E5%A4%84%E7%90%86%E6%B5%81%E7%A8%8Bi40e/</link>
+      <pubDate>Mon, 30 May 2022 09:00:00 +0800</pubDate>
+      
+      <guid>https://eiempleo.github.io/posts/dpdk-%E7%BD%91%E5%8D%A1%E4%B8%AD%E6%96%AD%E7%9A%84%E5%A4%84%E7%90%86%E6%B5%81%E7%A8%8Bi40e/</guid>
+      <description>参考 https://www.jianshu.com/p/9eb47110cf91
+这个链接整理的很完善，基于 dpdk 2203 、 i40e 整理，
+介绍， 主要处理 网卡的 各种中断消息，
+比如 pf vf 之间的通信: i40e_dev_interrupt_handler().i40e_dev_handle_aq_msg().i40e_pf_host_handle_vf_msg()
+link change 消息: i40e_dev_interrupt_handler().i40e_dev_handle_aq_msg().i40e_dev_link_update()
+这种中断(不处理收发包)对性能要求不高， 通过 在 main lcore 上单独开了个线程进行处理，
+中断类型现在应该一般都是 msi-x ，
+dpdk 收发包没有使用中断，
+相关代码， kernel uio 设备: drivers/uio/uio.c
+中断处理线程的创建， rte_eal_init().rte_eal_intr_init()
+ pipe(intr_pipe.pipefd)
+创建 pipe intr_pipe.pipefd ，随后添加 intr_pipe.readfd 到 epoll 里，
+后面 注册中断 fd 和 回调时， rte_intr_callback_register() 更新 intr_sources 后会通过 epoll 监听的 pipe
+来通知 eal_intr_thread_main 重建 the wait list of epoll
+create a pipe which will be waited by epoll and notified to rebuild the wait list of epoll.</description>
+    </item>
+    
+    <item>
+      <title>dpdk 网卡 配置 和 收发包 相关流程介绍（i40e）</title>
+      <link>https://eiempleo.github.io/posts/dpdk-%E7%BD%91%E5%8D%A1-%E9%85%8D%E7%BD%AE-%E5%92%8C-%E6%94%B6%E5%8F%91%E5%8C%85-%E7%9B%B8%E5%85%B3%E6%B5%81%E7%A8%8B%E4%BB%8B%E7%BB%8Di40e/</link>
+      <pubDate>Mon, 07 Mar 2022 09:00:00 +0800</pubDate>
+      
+      <guid>https://eiempleo.github.io/posts/dpdk-%E7%BD%91%E5%8D%A1-%E9%85%8D%E7%BD%AE-%E5%92%8C-%E6%94%B6%E5%8F%91%E5%8C%85-%E7%9B%B8%E5%85%B3%E6%B5%81%E7%A8%8B%E4%BB%8B%E7%BB%8Di40e/</guid>
+      <description>参考 https://www.cnblogs.com/yhp-smarthome/p/6705638.html
+关于 eth dev ops ， ixgbe 为 ixgbe_eth_dev_ops ， i40e 为 i40e_eth_dev_ops ，
+eth_dev-&amp;gt;dev_ops 在 probe 时赋值的，
+eth_i40e_pci_probe().eth_i40e_dev_init()
+dev-&amp;gt;dev_ops = &amp;amp;i40e_eth_dev_ops;
+cn10k_pci_nix().probe
+&amp;ndash;&amp;gt; cn10k_nix_probe().cnxk_nix_probe().cnxk_eth_dev_init()
+eth_dev-&amp;gt;dev_ops = &amp;amp;cnxk_eth_dev_ops;
+配置 网卡 的流程 通常配置网卡设备信息由如下几步组成:
+(1) 创建一个 mbuf pool:
+mbuf pool 主要是给网卡接收数据包提供 mbuf 的，网卡收到数据需要把数据包通过 DMA 传送到这个 mbuf pool 中的内存中，
+testpmd 使用 mbuf_pool_create() 的 rte_pktmbuf_pool_create() 创建的 mbuf 内存池，
+vpp 使用 vlib_buffer_main_init() 和 dpdk_buffer_pool_init() 创建的 mbuf 内存池，
+(2) rte_eth_dev_configure(): 配置队列的个数，以及接口的配置信息，
+进行一些基础的设置，(如 mtu 、 队列数量， rss 相关， 细节没看)</description>
+    </item>
+    
+    <item>
+      <title>rte_timer_subsystem_init 初始化介绍</title>
+      <link>https://eiempleo.github.io/posts/rte_timer_subsystem_init-%E5%88%9D%E5%A7%8B%E5%8C%96%E4%BB%8B%E7%BB%8D/</link>
+      <pubDate>Sun, 30 Jan 2022 15:00:00 +0800</pubDate>
+      
+      <guid>https://eiempleo.github.io/posts/rte_timer_subsystem_init-%E5%88%9D%E5%A7%8B%E5%8C%96%E4%BB%8B%E7%BB%8D/</guid>
+      <description>rte_timer_subsystem_init() 未初始化的数据在什么时候清空的，  mmap 的大页内存 或 匿名内存 ， 在缺页处理时会清 0 ，防止读取到其他进程的内存，
+ 感觉 rte_timer_subsystem_init() 里并没有初始化 rte_timer_data_arr[i].priv_timer
+但 timer_get_prev_entries() 里是直接用的 priv_timer ，
+使用 未初始化的 priv_timer 不会有问题吗，
+哪里有初始化过吗，
+在 vpp 的 dpdk_plugin.so 插件里通过 rte_timer_subsystem_init() 初始化了 dpdk timer ，
+并没有添加任何 dpdk timer ，
+使用 gdb 打印， 发现未初始化的部分都是 0 ，
+看来在 rte_timer_subsystem_init() 初始化时，不知道哪个部分将 rte_timer_data_arr 内存的值都赋值为 0 了，
+感觉是 rte_memzone_reserve_aligned() 分配内存 mmap 附近，
+查找 分配内存时 mmap() 的位置， 发现 alloc_seg()
+看到 alloc_seg() 里在 mmap() 后有下面一段话，
+/* * map the segment, and populate page tables, the kernel fills * this segment with zeros if it&amp;#39;s a new page.</description>
+    </item>
+    
+    <item>
+      <title>rte_timer 介绍</title>
+      <link>https://eiempleo.github.io/posts/rte_timer-%E4%BB%8B%E7%BB%8D/</link>
+      <pubDate>Tue, 25 Jan 2022 09:00:00 +0800</pubDate>
+      
+      <guid>https://eiempleo.github.io/posts/rte_timer-%E4%BB%8B%E7%BB%8D/</guid>
+      <description>https://doc.dpdk.org/guides/prog_guide/timer_lib.html
+timer lib 特性，  Timers can be periodic (multi-shot) or single (one-shot).  可以在一个 lcore 加载， 另一个 lcore 执行， 通过 rte_timer_reset() 指定，
+2. Timers can be loaded from one core and executed on another. It has to be specified in the call to rte_timer_reset().
+可通过调用 rte_timer_manage() 的频率 提高 timer 的精度，
+3. Timers provide high precision (depends on the call frequency to rte_timer_manage() that checks timer expiration for the local core).</description>
+    </item>
+    
+    <item>
+      <title>vpp bitmap 介绍</title>
+      <link>https://eiempleo.github.io/posts/vpp-bitmap/</link>
+      <pubDate>Wed, 01 Dec 2021 09:00:00 +0800</pubDate>
+      
+      <guid>https://eiempleo.github.io/posts/vpp-bitmap/</guid>
+      <description>相关文件 src/vppinfra/bitmap.c src/vppinfra/bitmap.h
+结构， 本质上为 vector ， vector 的元素为 uword ，
+| vec_header_t | elem | elem | elem | ，，， |
+uword *bitmap 或 uword *ai 指向 vec_header_t 后的位置，也就是第一个 elem 开始的位置，
+typedef uword clib_bitmap_t;
+clib_bitmap_alloc() 、 clib_bitmap_validate() 或 clib_bitmap_vec_validate() 分配空间，
+上面几个函数 还可能涉及重新分配空间，
+通过 vec_resize_allocate_memory().clib_mem_alloc_aligned_at_offset().mspace_get_aligned() 进行分配，
+通过 vec_resize_allocate_memory().clib_mem_free().mspace_put() 进行释放，
+接口 clib_bitmap_set() clib_bitmap_set().clib_bitmap_vec_validate() 可能会重新分配 bitmap 的空间，
+需要用 返回值 给 bitmap handle 赋值，
+如 vls_shd-&amp;gt;listeners = clib_bitmap_set(vls_shd-&amp;gt;listeners, wrk_index, is_active);
+否则会造成内存泄漏，
+且 bitmap handle(这里为 vls_shd-&amp;gt;listeners) 一直为 未赋值状态(如 0x0) ，</description>
+    </item>
+    
+    <item>
+      <title>vpp 路由基础概念</title>
+      <link>https://eiempleo.github.io/posts/vpp-%E8%B7%AF%E7%94%B1%E5%9F%BA%E7%A1%80%E6%A6%82%E5%BF%B5/</link>
+      <pubDate>Tue, 17 Aug 2021 18:00:00 +0800</pubDate>
+      
+      <guid>https://eiempleo.github.io/posts/vpp-%E8%B7%AF%E7%94%B1%E5%9F%BA%E7%A1%80%E6%A6%82%E5%BF%B5/</guid>
+      <description>https://fd.io/docs/vpp/master/developer/corefeatures/fib/routes.html https://github.com/FDio/vpp/blob/master/src/vnet/fib/fib.h
+代码查看思路 搭建测试环境， 查看每种流程的触发条件，使用 gdb 跟踪， 因为 vpp route 太过于 复杂， 直接查看代码很有可能分析错误，
+多使用 show ip fib [prefix] [detail] 命令，
+适当参考 官方文档，
+可适当通过日志查看流程，(路由太过复杂，适合已经比较熟悉后再这样查看，) 设置的 level 要大于等于 vlib_log() 指定的 默认 level 才能输出，debug 是最大的， set logging class fib level debug set logging class ip level debug set logging class ip6 level debug set logging class dpo level debug set logging class adj level debug
+日志输出 相关接口， FIB_ENTRY_DBG() FIB_PATH_DBG() FIB_PATH_LIST_DBG() FIB_WALK_DBG()
+route 的组成，(prefix + path) 主要包含 what to match against 和 how to forward the matched packets ，</description>
+    </item>
+    
+    <item>
+      <title>dpdk malloc heap 介绍</title>
+      <link>https://eiempleo.github.io/posts/dpdk-malloc_heap-%E4%BB%8B%E7%BB%8D/</link>
+      <pubDate>Thu, 17 Jun 2021 18:56:00 +0800</pubDate>
+      
+      <guid>https://eiempleo.github.io/posts/dpdk-malloc_heap-%E4%BB%8B%E7%BB%8D/</guid>
+      <description>相关概念 rte_eal_init().rte_eal_malloc_heap_init() 进行初始化，
+default DPDK heaps: 默认 每个 socket 一个 malloc heap ，
+rte_eal_init().rte_eal_malloc_heap_init() 里可以看出，
+可以存在 external heap ， 这种 heap 的 heap id 特别大，
+rte_malloc_heap_socket_is_external() 可以进行判断，
+创建自己的 heap ， rte_malloc_heap_create() ，
+基本原理， 感觉主要就是 伙伴算法 ，
+每个 malloc_elem 结构如下，
+| header(struct malloc_elem) | memory space | (trailer size) |
+虚拟地址连续的一段内存作为一个 malloc_elem ，
+每个 malloc_elem 都可能是一个或多个 虚拟地址连续的 memory segment ，
+或者是 一个 memory segment 的一部分，
+共有两个结构，
+malloc_heap 的 first 和 last 组成的双向链表，</description>
+    </item>
+    
+    <item>
+      <title>vpp node 介绍</title>
+      <link>https://eiempleo.github.io/posts/vpp-node-%E4%BB%8B%E7%BB%8D/</link>
+      <pubDate>Mon, 28 Dec 2020 17:30:00 +0800</pubDate>
+      
+      <guid>https://eiempleo.github.io/posts/vpp-node-%E4%BB%8B%E7%BB%8D/</guid>
+      <description>node 类型， VLIB_NODE_TYPE_PRE_INPUT - run before all other node types
+VLIB_NODE_TYPE_INPUT - run as often as possible, after pre_input nodes
+VLIB_NODE_TYPE_INTERNAL - only when explicitly made runnable by adding pending frames for processing
+VLIB_NODE_TYPE_PROCESS - only when explicitly made runnable. &amp;ldquo;Process&amp;rdquo; nodes are actually cooperative multi-tasking threads. They must explicitly suspend after a reasonably short period of time.
+node 注册 通过 VLIB_REGISTER_NODE 宏，
+VLIB_REGISTER_NODE(dpdk_input_node) = {  .type = VLIB_NODE_TYPE_INPUT,  .</description>
+    </item>
+    
+    <item>
+      <title>vpp worker thread 初始化介绍</title>
+      <link>https://eiempleo.github.io/posts/vpp-worker-thread-%E5%88%9D%E5%A7%8B%E5%8C%96%E4%BB%8B%E7%BB%8D/</link>
+      <pubDate>Wed, 14 Oct 2020 15:00:00 +0800</pubDate>
+      
+      <guid>https://eiempleo.github.io/posts/vpp-worker-thread-%E5%88%9D%E5%A7%8B%E5%8C%96%E4%BB%8B%E7%BB%8D/</guid>
+      <description>vpp worker thread 初始化介绍， cpu_config() 可以配置 main thread 和 worker thread 与 cpu 的附属关系，
+通过 VLIB_REGISTER_THREAD() 注册 worker thread ， 其中包含 线程回调 vlib_worker_thread_fn() ，
+main().vlib_unix_main().clib_calljmp() --&amp;gt; thread0().vlib_main() { 	vlib_thread_init() 对线程进行一些基本的初始化， 	vlib_call_all_main_loop_enter_functions() 调用 start_workers() 初始化线程， } start_workers()
+ 复制一些线程私有的数据， 如 node_runtime 等结构， vlib_thread_stack_init() 分配栈内存， vlib_launch_thread_int(vlib_worker_thread_bootstrap_fn, w, c); 创建线程，  vlib_launch_thread_int().pthread_create() 创建线程，线程回调函数为 vlib_worker_thread_bootstrap_fn() ，
+vlib_worker_thread_bootstrap_fn() 调用 VLIB_REGISTER_THREAD() 注册的 w-&amp;gt;thread_function (arg) ，
+vpp worker 的回调为 vlib_worker_thread_fn()
+vlib_worker_thread_fn().vlib_worker_loop().vlib_main_or_worker_loop()
+查看， 可以通过 gdb 查看 vpp_main 、 vpp_wk_0 的堆栈，</description>
+    </item>
+    
+  </channel>
+</rss>
